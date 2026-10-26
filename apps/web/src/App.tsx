@@ -670,10 +670,12 @@ function LoginScreen({ onDone }: { onDone: () => void }) {
       setStep(result)
       setUseCode(!result.methods.passkey)
       if (result.methods.passkey) await verifyPasskey(result)
-    } catch {
+    } catch (reason) {
       setError(step
         ? text("验证码无效或登录已过期，请重试或返回重新登录。", "Invalid code or expired sign-in. Retry or return to sign in again.")
-        : t("auth.failed"))
+        : reason instanceof ApiError && reason.status === 401
+          ? t("auth.passwordFailed")
+          : t("auth.loginUnavailable"))
       if (!step) { setToken(""); setAttempt(value => value + 1) }
     } finally {
       setBusy(false)
