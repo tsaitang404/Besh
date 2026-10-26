@@ -7,7 +7,8 @@ main = "apps/worker/src/index.ts"
 #   and never rotate it without re-sealing, or stored credentials become unreadable.
 compatibility_date = "2026-10-01"
 
-workers_dev = true
+workers_dev = false
+routes = [{ pattern = "ssh.sadd.ing", custom_domain = true }]
 
 # Every version would otherwise get its own public hostname; the app has one
 # origin by design, and an extra hostname is one more place to leave unclaimed.
@@ -19,7 +20,7 @@ preview_urls = false
 [[d1_databases]]
 binding = "DB"
 database_name = "besh"
-database_id = "b228986e-5362-4f67-b868-6a0a015f505e"
+database_id = "220dc762-004c-4638-be00-58825a0a1bca"
 migrations_dir = "db/migrations"
 
 [[durable_objects.bindings]]

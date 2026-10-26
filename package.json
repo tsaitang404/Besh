@@ -12,6 +12,7 @@
     "node": ">=22.12.0"
   },
   "scripts": {
+    "test:regressions": "node tests/deployment-regressions.mjs",
     "check": "npm run check:types && npm run check:web && npm run check:bundle",
     "check:types": "tsc -p tsconfig.json --noEmit",
     "check:bundle": "wrangler deploy --dry-run --outdir .wrangler/build",
