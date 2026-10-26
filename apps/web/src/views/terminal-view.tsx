@@ -662,7 +662,7 @@ export function TerminalView({ sessionId, serverId, ticket, onError, onReconnect
           <ContextMenuTrigger asChild>
             <div
               ref={host}
-              className="min-h-0 flex-2 overflow-hidden bg-[var(--terminal-bg)] p-2"
+              className="besh-terminal-pane min-h-0 flex-2 overflow-hidden bg-[var(--terminal-bg)] p-2"
               onContextMenu={() => setSelection(terminalRef.current?.getSelection() ?? "")}
             />
           </ContextMenuTrigger>
@@ -677,7 +677,18 @@ export function TerminalView({ sessionId, serverId, ticket, onError, onReconnect
             </ContextMenuItem>
           </ContextMenuContent>
         </ContextMenu>
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-t border-border">
+        <div className="besh-mobile-keys" role="group" aria-label={t("terminal.mobileKeys")}>
+          {([["Esc", "\x1b"], ["Tab", "\t"], ["Ctrl-C", "\x03"], ["Ctrl-D", "\x04"], ["↑", "\x1b[A"], ["↓", "\x1b[B"]] as const).map(([label, input]) => (
+            <button key={label} type="button" disabled={!connected}
+              onPointerDown={(event) => event.preventDefault()}
+              onClick={() => {
+                const socket = socketRef.current
+                if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "input", data: encodeBase64(input) }))
+                terminalRef.current?.focus()
+              }}>{label}</button>
+          ))}
+        </div>
+        <div className="besh-file-pane flex min-h-0 flex-1 flex-col overflow-hidden border-t border-border">
           <SftpPanel
             request={request}
             enabled={connected}
