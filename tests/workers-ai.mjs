@@ -1,16 +1,16 @@
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
-import { workersAiProvider, reserveWorkersAiRequest, WORKERS_AI_DAILY_LIMIT } from '../apps/worker/src/domain/workers-ai.ts';
+import { workersAiProvider, recordWorkersAiRequest } from '../apps/worker/src/domain/workers-ai.ts';
 import { chat } from '../apps/worker/src/domain/ai-chat.ts';
 function database() {
   const sql=new DatabaseSync(':memory:');
   sql.exec(readFileSync(new URL('../db/migrations/0002_workers_ai_budget.sql',import.meta.url),'utf8'));
   return {prepare(query){let params=[];return {bind(...values){params=values;return this;},async first(){return sql.prepare(query).get(...params)||null;}};}};
 }
-const db=database();const claims=await Promise.allSettled(Array.from({length:45},()=>reserveWorkersAiRequest(db,0)));
-assert.equal(claims.filter(c=>c.status==='fulfilled').length,WORKERS_AI_DAILY_LIMIT);
-await reserveWorkersAiRequest(db,86400000);console.log('PASS atomic per-day quota and UTC rollover');
+const db=database();const claims=await Promise.allSettled(Array.from({length:45},()=>recordWorkersAiRequest(db,0)));
+assert.equal(claims.filter(c=>c.status==='fulfilled').length,45);
+await recordWorkersAiRequest(db,86400000);console.log('PASS more than 40 requests accepted and UTC counter rollover');
 let called=0;
 const provider=workersAiProvider({DB:database(),AI:{async run(model,body){called++;assert.equal(model,'@cf/qwen/qwen3-30b-a3b-fp8');assert.equal(body.max_tokens,2048);assert(body.tools);return {choices:[{message:{content:'BESH_AI_OK'}}],usage:{prompt_tokens:5,completion_tokens:4}};}}});
 const reply=await chat(provider,[{role:'user',content:'test'}]);assert.equal(reply.content,'BESH_AI_OK');assert.equal(reply.usage.promptTokens,5);assert.equal(called,1);console.log('PASS native JSON transport and token accounting');
@@ -33,3 +33,11 @@ await assert.rejects(chat(premature,[{role:'user',content:'test'}],{onText:()=>{
 console.log('PASS terminal metadata cannot authorize incomplete tool output');
 const rawJson=workersAiProvider({DB:database(),AI:{async run(){return Response.json({result:{choices:[{message:{content:'RAW_OK'}}]}});}}});
 assert.equal((await chat(rawJson,[{role:'user',content:'test'}])).content,'RAW_OK');console.log('PASS raw binding JSON response envelope');
+
+const alreadyUsed=database();for(let i=0;i<45;i++)await recordWorkersAiRequest(alreadyUsed);
+const uncapped=workersAiProvider({DB:alreadyUsed,AI:{async run(){return {choices:[{message:{content:'AFTER_40_OK'}}]};}}});
+assert.equal((await chat(uncapped,[{role:'user',content:'test'}])).content,'AFTER_40_OK');
+console.log('PASS inference remains available after 45 daily calls');
+const statsOffline=workersAiProvider({DB:{prepare(){throw Error('stats unavailable');}},AI:{async run(){return {choices:[{message:{content:'STATS_OPTIONAL'}}]};}}});
+assert.equal((await chat(statsOffline,[{role:'user',content:'test'}])).content,'STATS_OPTIONAL');
+console.log('PASS request statistics failure does not block inference');

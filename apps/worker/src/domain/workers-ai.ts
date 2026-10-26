@@ -1,24 +1,19 @@
 import type { ChatConfig } from "./ai-chat.ts"
 
 export const WORKERS_AI_MODEL = "@cf/qwen/qwen3-30b-a3b-fp8"
-export const WORKERS_AI_DAILY_LIMIT = 40
 export const WORKERS_AI_MAX_OUTPUT = 2048
 export type WorkersAiBinding = {
   run(model: string, input: Record<string, unknown>, options?: { returnRawResponse: true }): Promise<unknown>
 }
 export type WorkersAiEnv = { AI?: WorkersAiBinding; DB: D1Database }
 
-/** Reserve before inference, atomically across every SSH session and title call.
- * Failed/cancelled calls remain counted: they may already have consumed GPU work.
- */
-export async function reserveWorkersAiRequest(db: D1Database, now = Date.now()): Promise<void> {
+/** Best-effort request statistics; never a gate on model access. */
+export async function recordWorkersAiRequest(db: D1Database, now = Date.now()): Promise<void> {
   const day = new Date(now).toISOString().slice(0, 10)
-  const row = await db.prepare(
+  await db.prepare(
     `INSERT INTO workers_ai_budget (day, requests) VALUES (?, 1)
-     ON CONFLICT(day) DO UPDATE SET requests = requests + 1
-     WHERE requests < ? RETURNING requests`
-  ).bind(day, WORKERS_AI_DAILY_LIMIT).first<{ requests: number }>()
-  if (!row) throw new Error(`Workers AI 每日调用上限已达 ${WORKERS_AI_DAILY_LIMIT} 次，UTC 零点重置；也可配置自定义模型。`)
+     ON CONFLICT(day) DO UPDATE SET requests = requests + 1 RETURNING requests`
+  ).bind(day).first<{ requests: number }>()
 }
 
 export async function workersAiStatus(env: WorkersAiEnv) {
@@ -26,7 +21,7 @@ export async function workersAiStatus(env: WorkersAiEnv) {
   const day = new Date().toISOString().slice(0, 10)
   const row = await env.DB.prepare("SELECT requests FROM workers_ai_budget WHERE day = ?")
     .bind(day).first<{ requests: number }>()
-  return { model: WORKERS_AI_MODEL, dailyLimit: WORKERS_AI_DAILY_LIMIT, requestsUsed: row?.requests ?? 0 }
+  return { model: WORKERS_AI_MODEL, requestsUsed: row?.requests ?? 0 }
 }
 
 /** Keep the existing OpenAI/SSE parser, cancellation and manual approval policy. */
@@ -38,7 +33,7 @@ export function workersAiProvider(env: WorkersAiEnv): ChatConfig | null {
     contextWindow: 32768, maxOutput: WORKERS_AI_MAX_OUTPUT,
     request: async (body, signal) => {
       signal.throwIfAborted()
-      await reserveWorkersAiRequest(env.DB)
+      await recordWorkersAiRequest(env.DB).catch(() => undefined)
       signal.throwIfAborted()
       const { model: _model, reasoning_effort: _effort, ...input } = body
       const messages = input.messages as Array<{ content?: unknown }> | undefined

@@ -166,6 +166,6 @@ Apache-2.0，见 [LICENSE](LICENSE)。
 npx wrangler d1 execute besh --remote --file=db/migrations/0002_workers_ai_budget.sql -y
 ```
 
-内置模型仅支持文本。每次最多输出 2048 token、上下文 32768 token；全站每天最多调用 40 次，UTC 零点重置。每次推理前通过 D1 原子预留，工具追问及失败/取消调用也计数。此限制只覆盖本应用的内置模型，不覆盖账号其他 Workers AI 流量，不能代替 Cloudflare 账单限制。自定义模型不受这个内置配额约束。
+内置模型仅支持文本。每次最多输出 2048 token、上下文 32768 token，不设置应用层每日调用次数上限。D1 仅记录每日调用次数，UTC 零点重新计数；统计失败不会阻止推理。Cloudflare 自身的额度、速率和计费规则仍适用。
 
-命令审批沿用原配置；新增 AI 绑定不会自动放开命令执行。可运行 `node tests/workers-ai.mjs` 验证流式工具调用、取消和配额竞争。
+命令审批沿用原配置；新增 AI 绑定不会自动放开命令执行。可运行 `node tests/workers-ai.mjs` 验证流式工具调用、取消和调用统计。

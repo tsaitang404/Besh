@@ -153,7 +153,7 @@ CREATE TABLE ai_usage (
 
 CREATE INDEX ai_usage_day ON ai_usage (day);
 
--- Native Workers AI call reservations (also installable on existing databases via 0002).
+-- Native Workers AI request statistics (legacy table name retained).
 CREATE TABLE IF NOT EXISTS workers_ai_budget (
   day TEXT PRIMARY KEY,
   requests INTEGER NOT NULL DEFAULT 0 CHECK (requests >= 0)

@@ -116,7 +116,7 @@ export function SettingsDialog({ open, onOpenChange, onPermissionChange }: {
   // someone wants to change them.
   const [paramsOpen, setParamsOpen] = useState(false)
   const [apiKey, setApiKey] = useState("")
-  const [nativeAi, setNativeAi] = useState<{ model: string; dailyLimit: number; requestsUsed: number } | null>(null)
+  const [nativeAi, setNativeAi] = useState<{ model: string; requestsUsed: number } | null>(null)
   const [hasKey, setHasKey] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -499,7 +499,7 @@ export function SettingsDialog({ open, onOpenChange, onPermissionChange }: {
               <Separator className="my-2" />
 
               {nativeAi && <p className="rounded-lg border border-border p-3 text-sm" role="status">
-                {t("settings.nativeAi", { model: nativeAi.model, used: nativeAi.requestsUsed, limit: nativeAi.dailyLimit })}
+                {t("settings.nativeAi", { model: nativeAi.model, used: nativeAi.requestsUsed })}
               </p>}
               <form onSubmit={saveProvider}>
                 <FieldGroup>
