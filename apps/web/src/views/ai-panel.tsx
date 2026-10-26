@@ -110,6 +110,16 @@ export function AiPanel({
   const [open, setOpen] = useState(false)
   const [renaming, setRenaming] = useState<StoredConversation | null>(null)
   const bottom = useRef<HTMLDivElement>(null)
+  const [now, setNow] = useState(Date.now)
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [])
+  const entries = state.entries.map((entry): Entry =>
+    entry.kind === "proposal" && entry.state === "pending" && entry.proposal.expiresAt <= now
+      ? { ...entry, state: "expired" }
+      : entry
+  )
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: "end" })
@@ -247,7 +257,7 @@ export function AiPanel({
 
           {/* A new message rises into place; streaming edits the same node, so the
               animation does not replay on every fragment. */}
-          {state.entries.map((entry, index) => (
+          {entries.map((entry, index) => (
             <div
               key={index}
               className="min-w-0 animate-in fade-in-0 slide-in-from-bottom-1 duration-200 ease-[var(--ease-out-soft)]"
@@ -296,6 +306,7 @@ export function AiPanel({
                     <div className="flex items-center gap-2 px-2.5 py-2">
                       <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground">
                         {entry.proposal.purpose || t("ai.state.pending")}
+                        <span className="ml-2">{t("ai.expiresIn", { seconds: Math.max(0, Math.ceil((entry.proposal.expiresAt - now) / 1000)) })}</span>
                       </span>
                       <Button
                         size="sm"
@@ -330,6 +341,12 @@ export function AiPanel({
                         )}
                       >
                         <span>{outcomeLabel(entry.state, entry.exitCode, t)}</span>
+                        {entry.state === "expired" && (
+                          <Button size="sm" variant="outline" className="ml-auto h-7" disabled={disabled}
+                            onClick={() => onAsk(`先前提案已过期。请根据当前主机状态重新评估以下操作，必要时生成新的 run_command 提案供审批，不要直接执行过期提案。目标：${entry.proposal.purpose}\n原命令：${entry.proposal.command}`, [])}>
+                            {t("ai.regenerate")}
+                          </Button>
+                        )}
                         {typeof entry.exitCode === "number" && (
                           <span
                             className={cn(
@@ -421,7 +438,7 @@ export function AiPanel({
       <AiComposer
         imagesAllowed={imagesAllowed}
         disabled={!state.configured || permission === "readonly"}
-        busy={state.busy || state.entries.some((entry) => entry.kind === "proposal" && entry.state === "pending")}
+        busy={state.busy || entries.some((entry) => entry.kind === "proposal" && entry.state === "pending")}
         onSend={onAsk}
         onStop={onStop}
       />

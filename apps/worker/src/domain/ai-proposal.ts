@@ -16,7 +16,7 @@
  */
 import { decide, type Permission, type Risk } from "./ai-approval.ts"
 
-export const PROPOSAL_TTL_MS = 60_000
+export const PROPOSAL_TTL_MS = 5 * 60_000
 
 export type ProposalStatus = "pending" | "denied" | "approved" | "rejected" | "expired"
 
