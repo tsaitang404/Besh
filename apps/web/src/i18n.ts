@@ -9,6 +9,7 @@ import { initReactI18next } from "react-i18next"
  * output) is data and is never translated.
  */
 const zhCN = {
+  "settings.nativeAi": "内置 Workers AI：{{model}}。无需密钥；自定义模型配置完整后优先使用。今日调用 {{used}} / {{limit}}（UTC 重置，含工具追问；失败调用也计数）。",
   "app.mobileNavigation": "工作区导航",
   "app.mobileServers": "主机",
   "app.mobileTerminal": "终端",
@@ -353,6 +354,7 @@ const zhCN = {
 }
 
 const enUS: Record<keyof typeof zhCN, string> = {
+  "settings.nativeAi": "Built-in Workers AI: {{model}}. No API key required; a complete custom provider takes priority. Today: {{used}} / {{limit}} calls (UTC reset; includes tool follow-ups and failed calls).",
   "app.mobileNavigation": "Workspace navigation",
   "app.mobileServers": "Servers",
   "app.mobileTerminal": "Terminal",

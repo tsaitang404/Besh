@@ -1,3 +1,4 @@
+import { workersAiProvider, type WorkersAiBinding } from "../domain/workers-ai.ts"
 /**
  * One Durable Object per SSH session.
  *
@@ -67,6 +68,7 @@ export type SessionEnv = {
   CREDENTIAL_KEY_VERSION?: string
   TICKET_SECRET: string
   /** OpenAI-compatible endpoint; all three are required for the assistant. */
+  AI?: WorkersAiBinding
   AI_BASE_URL?: string
   AI_API_KEY?: string
   AI_MODEL?: string
@@ -135,14 +137,7 @@ function clipOutput(text: string, maxChars: number): string {
 }
 
 /** Where the assistant talks, and how it was told to answer. */
-type ProviderTarget = {
-  baseUrl: string
-  model: string
-  apiKey: string
-  maxOutput?: number | null
-  contextWindow?: number | null
-  effort?: string | null
-}
+type ProviderTarget = ChatConfig
 
 export class SessionOwner implements DurableObject {
   readonly #state: DurableObjectState
@@ -751,7 +746,7 @@ export class SessionOwner implements DurableObject {
     if (this.#env.AI_BASE_URL && this.#env.AI_API_KEY && this.#env.AI_MODEL) {
       return { baseUrl: this.#env.AI_BASE_URL, model: this.#env.AI_MODEL, apiKey: this.#env.AI_API_KEY }
     }
-    return null
+    return workersAiProvider(this.#env)
   }
 
   /**

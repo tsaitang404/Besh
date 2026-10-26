@@ -155,3 +155,17 @@ assets/               README 截图
 ## 许可证
 
 Apache-2.0，见 [LICENSE](LICENSE)。
+
+## 内置 Workers AI（此 fork）
+
+部署配置已绑定 Workers AI。未配置自定义模型时，助手使用 `@cf/qwen/qwen3-30b-a3b-fp8`，不需要填写 API Key。完整的自定义提供方或环境变量配置优先于内置模型，失败时不会偷偷切换提供方。
+
+已有数据库升级需先执行：
+
+```sh
+npx wrangler d1 execute besh --remote --file=db/migrations/0002_workers_ai_budget.sql -y
+```
+
+内置模型仅支持文本。每次最多输出 2048 token、上下文 32768 token；全站每天最多调用 40 次，UTC 零点重置。每次推理前通过 D1 原子预留，工具追问及失败/取消调用也计数。此限制只覆盖本应用的内置模型，不覆盖账号其他 Workers AI 流量，不能代替 Cloudflare 账单限制。自定义模型不受这个内置配额约束。
+
+命令审批沿用原配置；新增 AI 绑定不会自动放开命令执行。可运行 `node tests/workers-ai.mjs` 验证流式工具调用、取消和配额竞争。

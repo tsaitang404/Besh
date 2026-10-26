@@ -49,3 +49,6 @@ run_worker_first = true
 # touches objects older than a day, so an upload in flight is never a candidate.
 [triggers]
 crons = ["17 4 * * *"]
+
+[ai]
+binding = "AI"

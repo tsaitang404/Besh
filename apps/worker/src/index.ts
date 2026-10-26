@@ -1,3 +1,4 @@
+import type { WorkersAiBinding } from "./domain/workers-ai.ts"
 import { PROTOCOL_VERSION } from "@besh/contracts"
 import { withFramingProtection } from "./http/security-headers.ts"
 
@@ -35,6 +36,7 @@ import {
 export { SessionOwner } from "./do/session.ts"
 
 export type Env = {
+  AI?: WorkersAiBinding
   DB: D1Database
   ASSETS: Fetcher
   SESSIONS: DurableObjectNamespace

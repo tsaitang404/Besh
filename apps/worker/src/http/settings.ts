@@ -1,3 +1,4 @@
+import { workersAiStatus, type WorkersAiBinding } from "../domain/workers-ai.ts"
 /**
  * Settings endpoints.
  *
@@ -20,6 +21,7 @@ import { readCredentialKey } from "../domain/credential-key.ts"
 import { jsonError } from "./auth.ts"
 
 export type SettingsEnv = {
+  AI?: WorkersAiBinding
   DB: D1Database
   CREDENTIAL_KEY?: string
   AI_BASE_URL?: string
@@ -29,7 +31,7 @@ export type SettingsEnv = {
 
 /** Only whether it is configured: the key and endpoint never leave the worker. */
 function aiConfigured(env: SettingsEnv): boolean {
-  return Boolean(env.AI_BASE_URL && env.AI_API_KEY && env.AI_MODEL)
+  return Boolean(env.AI) || Boolean(env.AI_BASE_URL && env.AI_API_KEY && env.AI_MODEL)
 }
 
 export async function handleGetSettings(env: SettingsEnv): Promise<Response> {
@@ -39,6 +41,7 @@ export async function handleGetSettings(env: SettingsEnv): Promise<Response> {
     {
       ...(await readSettings(env.DB, aiConfigured(env) || provider.configured)),
       aiProvider: provider,
+      nativeAi: await workersAiStatus(env),
       turnstile,
       ui: await readUiSettings(env.DB),
     },
@@ -118,6 +121,7 @@ export async function handlePutSettings(request: Request, env: SettingsEnv): Pro
     {
       ...(await readSettings(env.DB, aiConfigured(env) || provider.configured)),
       aiProvider: provider,
+      nativeAi: await workersAiStatus(env),
       turnstile,
       ui: await readUiSettings(env.DB),
     },

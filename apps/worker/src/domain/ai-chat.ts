@@ -89,6 +89,7 @@ const APP_HEADERS: Record<string, string> = {
 }
 
 export type ChatConfig = {
+  request?: (body: Record<string, unknown>, signal: AbortSignal) => Promise<Response>
   /** e.g. https://api.openai.com/v1 — trailing slash is tolerated. */
   baseUrl: string
   apiKey: string
@@ -164,7 +165,7 @@ export async function chat(
   messages: ChatMessage[],
   options: ChatOptions = {}
 ): Promise<ChatReply> {
-  if (!config.apiKey) throw new ChatError("The model provider key is not configured")
+  if (!config.apiKey && !config.request) throw new ChatError("The model provider key is not configured")
   if (!config.model) throw new ChatError("No model name is configured")
 
   const endpoint = `${config.baseUrl.replace(/\/+$/, "")}/chat/completions`
@@ -193,25 +194,19 @@ export async function chat(
 
   try {
     throwIfAborted(controller.signal)
-    const pendingResponse = fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${config.apiKey}`,
-        ...APP_HEADERS,
-      },
-      body: JSON.stringify({
-        model: config.model,
-        messages: toWire(messages),
-        tools: [RUN_COMMAND_TOOL],
-        ...(config.maxOutput ? { max_tokens: config.maxOutput } : {}),
-        ...(config.effort ? { reasoning_effort: config.effort } : {}),
-        // Asking for usage on a stream is what makes the counters work at all: the
-        // numbers arrive in a final event whose choices array is empty.
-        ...(options.onText ? { stream: true, stream_options: { include_usage: true } } : {}),
-      }),
-      signal: controller.signal,
-    })
+    const body: Record<string, unknown> = {
+      model: config.model, messages: toWire(messages), tools: [RUN_COMMAND_TOOL],
+      ...(config.maxOutput ? { max_tokens: config.maxOutput } : {}),
+      ...(config.effort ? { reasoning_effort: config.effort } : {}),
+      ...(options.onText ? { stream: true, stream_options: { include_usage: true } } : {}),
+    }
+    const pendingResponse = config.request
+      ? config.request(body, controller.signal)
+      : fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.apiKey}`, ...APP_HEADERS },
+          body: JSON.stringify(body), signal: controller.signal,
+        })
     // Real fetch observes its signal. This also releases a late response from an
     // adapter that settles after cancellation rather than honouring it immediately.
     void pendingResponse.then((late) => {
@@ -240,6 +235,9 @@ export async function chat(
       reply = parseJsonReply(text)
     }
     throwIfAborted(controller.signal)
+    if (!reply.content.trim() && reply.toolCalls.length === 0) {
+      throw new ChatError("模型没有返回有效回答或命令，请重试或切换模型")
+    }
     return reply
   } catch (error) {
     if (controller.signal.aborted) {
@@ -362,12 +360,18 @@ async function readStreamedReply(
       // never a keep-alive and must not turn partial commands into a success.
       throw malformed()
     }
-    if (!event || typeof event !== "object" || event.error || !Array.isArray(event.choices)) throw malformed()
+    if (!event || typeof event !== "object" || event.error) throw malformed()
+    const reported = readProviderUsage((event as { usage?: unknown }).usage)
+    // Workers AI appends a usage summary without choices after the completed
+    // OpenAI choice. Accept only that terminal footer, never an incomplete call.
+    if (!Array.isArray(event.choices)) {
+      if (terminalChoice && "response" in event && reported) { usage = reported; return }
+      throw malformed()
+    }
     const choice = event.choices.find((raw) => raw && (raw.index === undefined || raw.index === 0)) as
       { delta?: Record<string, unknown>; finish_reason?: unknown } | undefined
     // The usage-only event carries no choice; a provider may also attach the block
     // to its last content event, so read it wherever it appears.
-    const reported = readProviderUsage((event as { usage?: unknown }).usage)
     if (reported) usage = reported
     // OpenAI's final usage-only event has an empty choices array.
     if (!choice) return

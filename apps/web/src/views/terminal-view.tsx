@@ -260,7 +260,7 @@ export function TerminalView({ sessionId, serverId, ticket, onError, onReconnect
     void api
       .settings()
       .then((settings) => {
-        if (!cancelled) setImagesAllowed(settings.aiProvider.params.inputs.image)
+        if (!cancelled) setImagesAllowed(settings.aiProvider.configured && settings.aiProvider.params.inputs.image)
       })
       .catch(() => {
         // An unreadable setting leaves the picker off; the dialog is where it is set.

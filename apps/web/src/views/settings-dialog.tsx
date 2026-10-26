@@ -108,6 +108,7 @@ export function SettingsDialog({ open, onOpenChange, onPermissionChange }: {
   // someone wants to change them.
   const [paramsOpen, setParamsOpen] = useState(false)
   const [apiKey, setApiKey] = useState("")
+  const [nativeAi, setNativeAi] = useState<{ model: string; dailyLimit: number; requestsUsed: number } | null>(null)
   const [hasKey, setHasKey] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -121,6 +122,7 @@ export function SettingsDialog({ open, onOpenChange, onPermissionChange }: {
       setGroups(nextGroups)
       setPermission(settings.aiPermission)
       setConfigured(settings.aiConfigured)
+      setNativeAi(settings.nativeAi ?? null)
       setProviderReady(settings.aiProvider.configured)
       setHasKey(settings.aiProvider.hasKey)
       setBaseUrl(settings.aiProvider.baseUrl)
@@ -190,7 +192,8 @@ export function SettingsDialog({ open, onOpenChange, onPermissionChange }: {
           },
         },
       })
-      setConfigured(saved.aiProvider.configured)
+      setConfigured(saved.aiConfigured)
+      setNativeAi(saved.nativeAi ?? null)
       setProviderReady(saved.aiProvider.configured)
       setHasKey(saved.aiProvider.hasKey)
       setModels(null)
@@ -487,6 +490,9 @@ export function SettingsDialog({ open, onOpenChange, onPermissionChange }: {
 
               <Separator className="my-2" />
 
+              {nativeAi && <p className="rounded-lg border border-border p-3 text-sm" role="status">
+                {t("settings.nativeAi", { model: nativeAi.model, used: nativeAi.requestsUsed, limit: nativeAi.dailyLimit })}
+              </p>}
               <form onSubmit={saveProvider}>
                 <FieldGroup>
                   <h4 className="text-[13px] font-medium">{t("settings.provider")}</h4>

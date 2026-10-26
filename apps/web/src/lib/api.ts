@@ -134,6 +134,7 @@ export const api = {
   async settings(): Promise<{
     aiPermission: Permission
     aiConfigured: boolean
+    nativeAi?: { model: string; dailyLimit: number; requestsUsed: number } | null
     aiProvider: AiProvider
     turnstile: TurnstileState
     ui: UiSettings
@@ -149,6 +150,7 @@ export const api = {
   }): Promise<{
     aiPermission: Permission
     aiConfigured: boolean
+    nativeAi?: { model: string; dailyLimit: number; requestsUsed: number } | null
     aiProvider: AiProvider
     turnstile: TurnstileState
     ui: UiSettings
