@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { ChevronDown, ChevronRight, LogOut, MoreVertical, Network, Pencil, Plus, Search, Settings, Trash2, X } from "lucide-react"
+import { ChevronDown, ChevronRight, Folder, LogOut, MessageSquare, MoreVertical, Network, Pencil, Plus, Search, Settings, Terminal, Trash2, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Toaster } from "@/components/ui/sonner"
@@ -157,6 +157,7 @@ function Shell({ onSignedOut }: { onSignedOut: () => void }) {
   type OpenSession = { key: string; server: Server; sessionId: string; ticket: string }
   const [sessions, setSessions] = useState<OpenSession[]>([])
   const [activeKey, setActiveKey] = useState<string | null>(null)
+  const [mobilePane, setMobilePane] = useState<"servers" | "terminal" | "files" | "assistant">("servers")
   const session = sessions.find((item) => item.key === activeKey) ?? null
   /** Read by callbacks that must not re-create themselves on every session change. */
   const sessionsRef = useRef<OpenSession[]>([])
@@ -285,6 +286,7 @@ function Shell({ onSignedOut }: { onSignedOut: () => void }) {
       const key = crypto.randomUUID()
       setSessions((current) => [...current, { key, server, sessionId, ticket }])
       setActiveKey(key)
+      setMobilePane("terminal")
     } catch (reason) {
       toast.error(reason instanceof ApiError ? reason.message : t("app.sessionFailed"))
     } finally {
@@ -293,10 +295,10 @@ function Shell({ onSignedOut }: { onSignedOut: () => void }) {
   }
 
   return (
-    <div className="flex h-dvh bg-background text-foreground">
-      <div className="flex min-w-0 flex-1 flex-col">
+    <div className="besh-shell flex h-dvh bg-background text-foreground" data-mobile-pane={mobilePane}>
+      <div className="besh-shell-main flex min-w-0 flex-1 flex-col">
       <header className="flex h-11 shrink-0 items-center border-b border-border">
-        <div className="flex h-full w-60 shrink-0 items-center justify-between border-r border-border pl-4 pr-[11px]">
+        <div className="besh-brand flex h-full w-60 shrink-0 items-center justify-between border-r border-border pl-4 pr-[11px]">
           <span className="flex items-center gap-[1px]">
               <img src={appIcon} alt="" aria-hidden="true" className="size-9 rounded-[10px]" />
               <span className="text-[19px] font-bold tracking-[-1px]">{t("app.brand")}</span>
@@ -330,7 +332,7 @@ function Shell({ onSignedOut }: { onSignedOut: () => void }) {
                   <button
                     type="button"
                     aria-pressed={isActive}
-                    onClick={() => setActiveKey(item.key)}
+                    onClick={() => { setActiveKey(item.key); setMobilePane("terminal") }}
                   className={cn(
                     "flex h-8 max-w-[185px] items-center gap-1.5 rounded-l-[12px] border-y border-l border-border pl-2.5 pr-2.5 text-[13px] transition-colors duration-150 ease-[var(--ease-out-soft)]",
                     isActive ? "bg-accent text-foreground" : "bg-muted text-muted-foreground hover:text-foreground"
@@ -365,7 +367,7 @@ function Shell({ onSignedOut }: { onSignedOut: () => void }) {
         </div>
       </header>
       <div className="flex min-h-0 flex-1">
-        <aside className="flex w-60 shrink-0 flex-col border-r border-border">
+        <aside className="besh-server-list flex w-60 shrink-0 flex-col border-r border-border">
           <div className="mx-3 mt-3.5 mb-3 flex h-8 shrink-0 items-center rounded-[12px] border border-border bg-muted focus-within:border-ring">
             <span className="grid size-8 shrink-0 place-items-center text-muted-foreground">
               <Search className="size-4" aria-hidden="true" />
@@ -483,7 +485,7 @@ function Shell({ onSignedOut }: { onSignedOut: () => void }) {
           </div>
         </aside>
 
-        <main className="flex min-w-0 flex-1 flex-col">
+        <main className="besh-workspace flex min-w-0 flex-1 flex-col">
           {sessions.length > 0 ? (
             <div className="flex min-h-0 flex-1 flex-col">
               {sessions.map((item) => (
@@ -535,6 +537,20 @@ function Shell({ onSignedOut }: { onSignedOut: () => void }) {
           </div>
         )}
       </aside>
+
+      <nav className="besh-mobile-nav" aria-label={t("app.mobileNavigation")}>
+        {([
+          ["servers", Network, "app.mobileServers"],
+          ["terminal", Terminal, "app.mobileTerminal"],
+          ["files", Folder, "app.mobileFiles"],
+          ["assistant", MessageSquare, "app.mobileAssistant"],
+        ] as const).map(([pane, Icon, label]) => (
+          <button key={pane} type="button" aria-current={mobilePane === pane ? "page" : undefined}
+            disabled={pane !== "servers" && !session} onClick={() => setMobilePane(pane)}>
+            <Icon size={20} aria-hidden="true" /><span>{t(label)}</span>
+          </button>
+        ))}
+      </nav>
 
       <AlertDialog open={deleting !== null} onOpenChange={(open) => !open && setDeleting(null)}>
         <AlertDialogContent>

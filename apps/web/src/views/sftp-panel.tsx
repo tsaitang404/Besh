@@ -796,7 +796,7 @@ export function SftpPanel({ request, enabled, onClearScreen, onDisconnect, onRec
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Directory tree: 175px */}
         <div
-        className={cn("w-[220px] shrink-0 overflow-auto border-r border-border p-2 transition-opacity", busy && "opacity-50")} aria-busy={busy}>
+        className={cn("hidden w-[220px] shrink-0 overflow-auto border-r border-border p-2 transition-opacity sm:block", busy && "opacity-50")} aria-busy={busy}>
           <TreeBranch
             label="/"
             path="/"

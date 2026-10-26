@@ -9,6 +9,12 @@ import { initReactI18next } from "react-i18next"
  * output) is data and is never translated.
  */
 const zhCN = {
+  "app.mobileNavigation": "工作区导航",
+  "app.mobileServers": "主机",
+  "app.mobileTerminal": "终端",
+  "app.mobileFiles": "文件",
+  "app.mobileAssistant": "助手",
+  "terminal.mobileKeys": "终端快捷键",
   "auth.turnstileStalled": "人机验证没有加载出来。若一直如此，请确认本站域名已加入 Turnstile 的允许域名。",
   "files.errNotFound": "路径不存在（可能已被删除或改名）。",
   "files.errPermission": "没有权限执行这个操作。",
@@ -347,6 +353,12 @@ const zhCN = {
 }
 
 const enUS: Record<keyof typeof zhCN, string> = {
+  "app.mobileNavigation": "Workspace navigation",
+  "app.mobileServers": "Servers",
+  "app.mobileTerminal": "Terminal",
+  "app.mobileFiles": "Files",
+  "app.mobileAssistant": "Assistant",
+  "terminal.mobileKeys": "Terminal shortcuts",
   "app.brand": "Besh",
   "app.checking": "Checking your session…",
   "app.searchServers": "Search servers",
