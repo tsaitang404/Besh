@@ -299,3 +299,24 @@
   .besh-mobile-keys button:disabled { opacity: .4; }
   input, select, textarea:not(.xterm-helper-textarea) { font-size: 16px; }
 }
+
+/* Settings portals outside the workspace: its responsive layout is independent. */
+@media (max-width: 767px) {
+  .besh-settings {
+    width: calc(100vw - 16px); height: calc(100dvh - 16px); max-width: none;
+  }
+  .besh-settings-tabs { flex-direction: column; }
+  .besh-settings-nav {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%; min-height: 0; height: auto; padding: 4px; gap: 2px;
+    border-right: 0; border-bottom: 1px solid var(--border);
+  }
+  .besh-settings-nav [role="tab"] {
+    width: 100%; min-width: 0; min-height: 44px; justify-content: center;
+    gap: 5px; padding: 4px; font-size: 12px; white-space: normal;
+  }
+  .besh-settings-nav [role="tab"] svg { width: 16px; height: 16px; flex-shrink: 0; }
+  .besh-settings-content { padding: 16px; overflow-wrap: anywhere; }
+  .besh-settings-content [data-slot="tabs-content"] { min-width: 0; }
+  .besh-settings-content #ai-model { flex: 1 0 100%; min-width: 0; }
+}

@@ -65,6 +65,14 @@ export function SettingsDialog({ open, onOpenChange, onPermissionChange }: {
   onPermissionChange?: (permission: Permission) => void
 }) {
   const { t, i18n } = useTranslation()
+  const [compact, setCompact] = useState(() => window.matchMedia("(max-width: 767px)").matches)
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 767px)")
+    const update = () => setCompact(media.matches)
+    update()
+    media.addEventListener("change", update)
+    return () => media.removeEventListener("change", update)
+  }, [])
   const { choice, setChoice } = useThemeChoice()
   const language = i18n.resolvedLanguage ?? "zh-CN"
   const [fontSize, setFontSize] = useState(readTerminalFont)
@@ -295,7 +303,7 @@ export function SettingsDialog({ open, onOpenChange, onPermissionChange }: {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="flex h-[min(720px,88vh)] w-[min(1080px,94vw)] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none"
+        className="besh-settings flex h-[min(720px,88dvh)] w-[min(1080px,94vw)] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none"
         showCloseButton={false}
       >
         <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-card px-4">
@@ -313,10 +321,10 @@ export function SettingsDialog({ open, onOpenChange, onPermissionChange }: {
           </Button>
         </div>
 
-        <Tabs orientation="vertical" defaultValue="appearance" className="min-h-0 flex-1 gap-0">
+        <Tabs orientation={compact ? "horizontal" : "vertical"} defaultValue="appearance" className="besh-settings-tabs min-h-0 min-w-0 flex-1 gap-0">
           <TabsList
             variant="line"
-            className="min-h-full w-[248px] shrink-0 flex-col items-stretch justify-start gap-0 border-r border-border bg-card p-2"
+            className="besh-settings-nav min-h-full w-[248px] shrink-0 flex-col items-stretch justify-start gap-0 border-r border-border bg-card p-2"
           >
             <TabsTrigger value="appearance" className={TAB}>
               <Palette className="size-[18px]" aria-hidden="true" />
@@ -344,7 +352,7 @@ export function SettingsDialog({ open, onOpenChange, onPermissionChange }: {
             </TabsTrigger>
           </TabsList>
 
-          <div className="min-h-0 flex-1 overflow-y-auto p-6">
+          <div className="besh-settings-content min-h-0 min-w-0 flex-1 overflow-y-auto p-6">
             <TabsContent value="appearance" className="flex flex-col gap-3">
               <h3 className="text-[15px] font-semibold">{t("settings.sections.appearance")}</h3>
               <p className="-mt-1 text-[13px] text-muted-foreground">{t("settings.appearanceHint")}</p>
@@ -352,7 +360,7 @@ export function SettingsDialog({ open, onOpenChange, onPermissionChange }: {
                 type="single"
                 value={choice}
                 onValueChange={(value) => value && setChoice(value as "dark" | "light" | "system")}
-                className="mt-2 grid w-full grid-cols-3 gap-3"
+                className="mt-2 grid w-full grid-cols-1 gap-3 sm:grid-cols-3"
                 aria-label={t("settings.sections.appearance")}
               >
                 {themeOptions.map((option) => (
@@ -442,7 +450,7 @@ export function SettingsDialog({ open, onOpenChange, onPermissionChange }: {
               </form>
               <p className="-mt-1 text-[11px] text-muted-foreground">{t("settings.groupHint")}</p>
 
-              <div className="mt-1 grid grid-cols-2 gap-2" role="list" aria-label={t("settings.sections.groups")}>
+              <div className="mt-1 grid grid-cols-1 gap-2 sm:grid-cols-2" role="list" aria-label={t("settings.sections.groups")}>
                 {groups === null && <p className="text-[13px] text-muted-foreground">{t("app.loading")}</p>}
                 {groups?.length === 0 && <p className="text-[13px] text-muted-foreground">{t("settings.noGroups")}</p>}
                 {groups?.map((group) => (
@@ -480,7 +488,7 @@ export function SettingsDialog({ open, onOpenChange, onPermissionChange }: {
                 type="single"
                 value={permission}
                 onValueChange={(value) => value && void changePermission(value as Permission)}
-                className="mt-2 grid w-full grid-cols-3 gap-3"
+                className="mt-2 grid w-full grid-cols-1 gap-3 sm:grid-cols-3"
                 aria-label={t("settings.aiPermission")}
               >
                 {permissionOptions.map((option) => (
@@ -542,7 +550,7 @@ export function SettingsDialog({ open, onOpenChange, onPermissionChange }: {
                       <div className="flex flex-col gap-3 border-t border-border px-3 py-3">
                   <Field>
                     <FieldLabel htmlFor="ai-model">{t("settings.providerModel")}</FieldLabel>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <Input
                         id="ai-model"
                         value={model}
@@ -598,7 +606,7 @@ export function SettingsDialog({ open, onOpenChange, onPermissionChange }: {
                             {t("settings.providerModels")}
                           </Button>
                         </PopoverTrigger>
-                        <PopoverContent align="end" className="w-[320px] p-0">
+                        <PopoverContent align="end" className="w-[min(320px,calc(100vw-2rem))] p-0">
                           <Command>
                             <CommandInput placeholder={t("settings.providerModelsSearch")} />
                             <CommandList>
@@ -623,7 +631,7 @@ export function SettingsDialog({ open, onOpenChange, onPermissionChange }: {
                       </Popover>
                     </div>
                   </Field>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <Field>
                       <FieldLabel htmlFor="ai-context">{t("settings.modelContext")}</FieldLabel>
                       <Input
