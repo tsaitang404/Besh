@@ -1,4 +1,4 @@
-import { authRateLimit, verifySecondFactor } from "./account-security.ts"
+import { authRateLimit, beginLoginStep } from "./account-security.ts"
 import type { ApiErrorBody, ErrorCode } from "@besh/contracts"
 
 import {
@@ -88,7 +88,8 @@ export async function handleLogin(request: Request, env: AuthEnv): Promise<Respo
   const passwordOk = await verifyPassword(password, admin)
   if (!usernameOk || !passwordOk) return jsonError("AUTH_REQUIRED", "Invalid credentials", 401)
 
-  if (!await verifySecondFactor(env, (body as Record<string, unknown>).code)) return jsonError("AUTH_REQUIRED", "Verification code or recovery code required", 401)
+  const secondStep = await beginLoginStep(request, env, admin)
+  if (secondStep) return secondStep
 
   const now = Date.now()
   const session = await createSessionToken(now)

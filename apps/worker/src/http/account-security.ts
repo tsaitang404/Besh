@@ -52,6 +52,30 @@ export async function issueSecuritySession(request: Request, env: AuthEnv, admin
   if (!await insertSession(env.DB, { hash: session.hash, createdAt: now, expiresAt: session.expiresAt }, admin)) return jsonError("AUTH_REQUIRED", "Authentication changed; sign in again", 401)
   return json({ authenticated: true }, 200, { "Set-Cookie": buildSessionCookie(session.token, { secure: new URL(request.url).protocol === "https:" }) })
 }
+/** Password proof is short-lived, origin-bound and cannot authorize normal API access. */
+export async function beginLoginStep(request: Request, env: AuthEnv, admin: AdminRow): Promise<Response | null> {
+  const state = await securityState(env.DB)
+  const passkey = await env.DB.prepare("SELECT id FROM passkeys LIMIT 1").first()
+  if (!state.totp && !passkey) return null
+  const stageToken = bytesToBase64Url(randomBytes(32))
+  const now = Date.now()
+  await env.DB.prepare("DELETE FROM auth_challenges WHERE expires_at <= ?").bind(now).run()
+  await env.DB.prepare("INSERT INTO auth_challenges VALUES (?, ?, ?, ?, ?, ?)")
+    .bind(await hashSessionToken(stageToken), "login-step", JSON.stringify({ origin: new URL(request.url).origin }), "", admin.securityVersion, now + 300000).run()
+  return json({ authenticated: false, secondFactorRequired: true, stageToken, methods: { passkey: !!passkey, totp: !!state.totp } })
+}
+async function readLoginStep(request: Request, env: AuthEnv, admin: AdminRow, token: unknown): Promise<string | null> {
+  if (typeof token !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(token)) return null
+  const hash = await hashSessionToken(token)
+  const row = await env.DB.prepare("SELECT payload, version FROM auth_challenges WHERE id = ? AND purpose = 'login-step' AND expires_at > ?")
+    .bind(hash, Date.now()).first<Challenge>()
+  if (!row || row.version !== admin.securityVersion || JSON.parse(row.payload).origin !== new URL(request.url).origin) return null
+  return hash
+}
+async function consumeLoginStep(request: Request, env: AuthEnv, admin: AdminRow, hash: string): Promise<boolean> {
+  const row = await takeChallenge(env, hash, "login-step", "")
+  return !!row && row.version === admin.securityVersion && JSON.parse(row.payload).origin === new URL(request.url).origin
+}
 async function saveChallenge(env: AuthEnv, purpose: string, payload: unknown, sessionHash: string, version: number) {
   const id = bytesToBase64Url(randomBytes(32)), now = Date.now()
   await env.DB.prepare("DELETE FROM auth_challenges WHERE expires_at <= ?").bind(now).run()
@@ -87,7 +111,7 @@ async function changeSecurity(request: Request, env: AuthEnv, admin: AdminRow, s
   return issueSecuritySession(request, env, { ...admin, securityVersion: next })
 }
 export async function handleAccountSecurity(request: Request, env: AuthEnv, path: string): Promise<Response> {
-  const publicRoute = path === "passkey/options" || path === "passkey/verify"
+  const publicRoute = path === "passkey/options" || path === "passkey/verify" || path === "login/verify"
   if (!publicRoute) { const denied = await requireAdmin(request, env); if (denied) return denied }
   if (path === "status" && request.method === "GET") {
     const state = await securityState(env.DB)
@@ -105,14 +129,24 @@ export async function handleAccountSecurity(request: Request, env: AuthEnv, path
   const url = new URL(request.url), rpID = url.hostname, origin = url.origin
   if (url.protocol !== "https:" && rpID !== "localhost" && rpID !== "127.0.0.1") return jsonError("INVALID_REQUEST", "HTTPS is required", 400)
   const sessionHash = publicRoute ? "" : await hashSessionToken(readCookie(request.headers.get("Cookie"))!)
+  const stageHash = publicRoute ? await readLoginStep(request, env, admin, body.stageToken) : null
+  if (publicRoute && !stageHash) return jsonError("AUTH_REQUIRED", "Password verification expired; sign in again", 401)
   const keys = await env.DB.prepare("SELECT * FROM passkeys").all<Passkey>()
+  if (path === "login/verify") {
+    if (!(await securityState(env.DB)).totp || !await verifySecondFactor(env, body.code)) {
+      return jsonError("AUTH_REQUIRED", "Invalid authenticator or recovery code", 401)
+    }
+    if (!await consumeLoginStep(request, env, admin, stageHash!)) return jsonError("AUTH_REQUIRED", "Password verification expired; sign in again", 401)
+    return issueSecuritySession(request, env, admin)
+  }
   if (path === "passkey/options") {
-    const options = await generateAuthenticationOptions({ rpID, userVerification: "required" })
-    const challengeId = await saveChallenge(env, "login", options.challenge, "", admin.securityVersion)
+    if (keys.results.length === 0) return jsonError("INVALID_REQUEST", "No passkey is registered", 400)
+    const options = await generateAuthenticationOptions({ rpID, userVerification: "required", allowCredentials: keys.results.map(key => ({ id: key.id, transports: JSON.parse(key.transports) })) })
+    const challengeId = await saveChallenge(env, "login", options.challenge, stageHash!, admin.securityVersion)
     return json({ options, challengeId })
   }
   if (path === "passkey/verify") {
-    const challenge = await takeChallenge(env, body.challengeId, "login", "")
+    const challenge = await takeChallenge(env, body.challengeId, "login", stageHash!)
     const response = body.response as AuthenticationResponseJSON | undefined
     const stored = keys.results.find(key => key.id === response?.id)
     if (!challenge || challenge.version !== admin.securityVersion || !stored || !response) return jsonError("AUTH_REQUIRED", "Invalid passkey", 401)
@@ -122,6 +156,7 @@ export async function handleAccountSecurity(request: Request, env: AuthEnv, path
       if (!result.verified) throw Error()
       const update = await env.DB.prepare("UPDATE passkeys SET counter = ? WHERE id = ? AND counter = ?").bind(result.authenticationInfo.newCounter, stored.id, stored.counter).run()
       if (update.meta.changes !== 1) throw Error()
+      if (!await consumeLoginStep(request, env, admin, stageHash!)) return jsonError("AUTH_REQUIRED", "Password verification expired; sign in again", 401)
       return issueSecuritySession(request, env, admin)
     } catch { return jsonError("AUTH_REQUIRED", "Invalid passkey", 401) }
   }

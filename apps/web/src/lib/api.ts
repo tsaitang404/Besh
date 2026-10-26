@@ -5,6 +5,7 @@
  * JavaScript. Errors carry the worker's stable code so the UI can translate them.
  */
 
+import type { LoginResult } from "./account-security"
 import type { AiErrorCode, ErrorCode } from "@besh/contracts"
 
 export type { AiErrorCode, ErrorCode }
@@ -113,10 +114,10 @@ export const api = {
     return request("/api/auth/bootstrap", { method: "POST", body: JSON.stringify({ username, password }) })
   },
 
-  login(username: string, password: string, turnstileToken?: string, code?: string): Promise<{ authenticated: boolean }> {
+  login(username: string, password: string, turnstileToken?: string): Promise<LoginResult> {
     return request("/api/auth/login", {
       method: "POST",
-      body: JSON.stringify({ username, password, turnstileToken, code }),
+      body: JSON.stringify({ username, password, turnstileToken }),
     })
   },
 

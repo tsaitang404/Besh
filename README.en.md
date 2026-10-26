@@ -157,9 +157,9 @@ Apache-2.0, see [LICENSE](LICENSE).
 
 ### Passkeys and two-step verification
 
-Manage passkeys and authenticator verification under **Settings → Account**. Passkeys support device biometrics, password managers and FIDO2 security keys with user verification. They allow direct sign-in with device verification and are bound to the registration hostname. HTTPS is required, with an exception for localhost.
+Manage passkeys and authenticator verification under **Settings → Account**. Passkeys support device biometrics, password managers and FIDO2 security keys with user verification. They are preferred as the second step after password verification and are bound to the registration hostname. HTTPS is required, with an exception for localhost.
 
-Authenticator setup uses standard TOTP (SHA-1, six digits, 30 seconds). Enter the setup key manually or open the authenticator link, then confirm a code to enable it. Password login and password changes then require an authenticator or recovery code. Managing security also requires the current password and second factor. Passkey sign-in requires device user verification rather than an additional TOTP code.
+Authenticator setup uses standard TOTP (SHA-1, six digits, 30 seconds). Enter the setup key manually or open the authenticator link, then confirm a code to enable it. The initial sign-in screen only shows account and password. After verifying the password, Besh first tries a registered passkey and offers authenticator or recovery codes as fallback. With only an authenticator configured it opens the code step directly; accounts without either method retain password-only sign-in. Password changes require an authenticator or recovery code when TOTP is enabled. Managing security also requires the current password and second factor. Passkey verification requires device user verification and completes the second step without an additional TOTP code.
 
 Save the ten single-use recovery codes shown during enrollment securely; they cannot be viewed again. To replace a lost authenticator, sign in with a recovery code, disable verification and enroll again. TOTP secrets are encrypted with the existing `CREDENTIAL_KEY`; recovery codes are stored as hashes. Password and security changes revoke other sessions and issue a replacement session to the successful caller.
 

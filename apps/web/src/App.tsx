@@ -1,4 +1,4 @@
-import { passkeyLogin } from "@/lib/account-security"
+import { passkeyLogin, securityRequest, type LoginStep } from "@/lib/account-security"
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ChevronDown, ChevronRight, Folder, LogOut, MessageSquare, MoreVertical, Network, Pencil, Plus, Search, Settings, Terminal, Trash2, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
@@ -610,46 +610,71 @@ function Shell({ onSignedOut }: { onSignedOut: () => void }) {
 
 function LoginScreen({ onDone }: { onDone: () => void }) {
   const { t, i18n } = useTranslation()
-  const [username, setUsername] = useState(readRememberedUsername)
   const zh = i18n.language.startsWith("zh")
-  const [code, setCode] = useState("")
+  const text = (cn: string, en: string) => zh ? cn : en
+  const [username, setUsername] = useState(readRememberedUsername)
   const [password, setPassword] = useState("")
+  const [code, setCode] = useState("")
+  const [step, setStep] = useState<LoginStep | null>(null)
+  const [useCode, setUseCode] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // The gate is off unless the worker says otherwise, so a deployment without
-  // Turnstile configured never even loads the script.
   const [gate, setGate] = useState<{ enabled: boolean; siteKey: string } | null>(null)
   const [token, setToken] = useState("")
-  // Bumped to remount the widget: a token is single use, and the challenge behind it
-  // is spent once the login attempt fails.
   const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
-    void turnstileConfig()
-      .then(setGate)
-      .catch(() => setGate({ enabled: false, siteKey: "" }))
+    void turnstileConfig().then(setGate).catch(() => setGate({ enabled: false, siteKey: "" }))
   }, [])
 
-  const needsToken = gate?.enabled === true
+  function done() {
+    try { localStorage.setItem("besh:username", username) } catch { /* Storage is optional. */ }
+    onDone()
+  }
 
+  async function verifyPasskey(current: LoginStep) {
+    try {
+      await passkeyLogin(current.stageToken)
+      done()
+    } catch {
+      setUseCode(current.methods.totp)
+      setError(current.methods.totp
+        ? text("通行密钥未完成，请使用验证器动态码或恢复码。", "Passkey verification did not finish. Use an authenticator or recovery code.")
+        : text("通行密钥未完成，请重试或返回重新登录。", "Passkey verification did not finish. Retry or return to sign in again."))
+    }
+  }
 
+  function restart() {
+    setStep(null)
+    setUseCode(false)
+    setCode("")
+    setError(null)
+    setToken("")
+    setAttempt(value => value + 1)
+  }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
     setBusy(true)
+    setError(null)
     try {
-      await api.login(username, password, needsToken ? token : undefined, code)
-      try {
-        localStorage.setItem("besh:username", username)
-      } catch {
-        // Storage refused; the next visit simply asks again.
+      if (step) {
+        await securityRequest("login/verify", { stageToken: step.stageToken, code })
+        done()
+        return
       }
-      onDone()
-    } catch {
-      toast.error(t("auth.failed"))
-      // Anything may have caused it, but the token is certainly spent now.
+      const result = await api.login(username, password, gate?.enabled ? token : undefined)
+      setPassword("")
       setToken("")
-      setAttempt((value) => value + 1)
+      if (result.authenticated) { done(); return }
+      setStep(result)
+      setUseCode(!result.methods.passkey)
+      if (result.methods.passkey) await verifyPasskey(result)
+    } catch {
+      setError(step
+        ? text("验证码无效或登录已过期，请重试或返回重新登录。", "Invalid code or expired sign-in. Retry or return to sign in again.")
+        : t("auth.failed"))
+      if (!step) { setToken(""); setAttempt(value => value + 1) }
     } finally {
       setBusy(false)
     }
@@ -659,8 +684,6 @@ function LoginScreen({ onDone }: { onDone: () => void }) {
     <AuthShell>
       <Card className="w-full max-w-sm">
         <CardHeader>
-          {/* One line, centred: the mark reads as part of the name, not as a separate
-              picture above it. */}
           <div className="flex items-center justify-center gap-[1px]">
             <img src={appIcon} alt="" aria-hidden="true" className="size-11 rounded-[11px]" />
             <CardTitle>{t("app.brand")}</CardTitle>
@@ -669,69 +692,42 @@ function LoginScreen({ onDone }: { onDone: () => void }) {
         <CardContent>
           <form onSubmit={submit}>
             <FieldGroup>
-              <Field>
-                <FieldLabel htmlFor="username">{t("auth.username")}</FieldLabel>
-                <Input
-                  id="username"
-                  value={username}
-                  onChange={(event) => setUsername(event.target.value)}
-                  autoComplete="username"
-                  autoFocus={username.length === 0}
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="password">{t("auth.password")}</FieldLabel>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  autoComplete="current-password"
-                  autoFocus={username.length > 0}
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="login-code">
-                  {zh ? "动态码或恢复码（如已启用）" : "Authenticator or recovery code (if enabled)"}
-                </FieldLabel>
-                <Input id="login-code" autoComplete="one-time-code" value={code} onChange={e => setCode(e.target.value)} />
-              </Field>
-              {gate?.enabled && (
-                <div className="flex justify-center">
-                  <Turnstile
-                    key={attempt}
-                    siteKey={gate.siteKey}
-                    onToken={setToken}
-                    // Reported as a toast: the failure is an event, not a permanent part
-                    // of the form. One id keeps a remount from stacking duplicates.
-                    onError={() => toast.error(t("auth.turnstileStalled"), { id: "turnstile-load" })}
-                  />
-                </div>
-              )}
+              {!step ? <>
+                <Field>
+                  <FieldLabel htmlFor="username">{t("auth.username")}</FieldLabel>
+                  <Input id="username" value={username} onChange={event => setUsername(event.target.value)} autoComplete="username" autoFocus={!username} />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="password">{t("auth.password")}</FieldLabel>
+                  <Input id="password" type="password" value={password} onChange={event => setPassword(event.target.value)} autoComplete="current-password" autoFocus={!!username} />
+                </Field>
+                {gate?.enabled && <div className="flex justify-center">
+                  <Turnstile key={attempt} siteKey={gate.siteKey} onToken={setToken} onError={() => toast.error(t("auth.turnstileStalled"), { id: "turnstile-load" })} />
+                </div>}
+              </> : <>
+                <p className="text-sm font-medium">{text("两步验证", "Two-step verification")}</p>
+                <p className="text-xs text-muted-foreground">{useCode
+                  ? text("输入验证器中的动态码，也可使用一次性恢复码。", "Enter your authenticator code or a single-use recovery code.")
+                  : text("密码已验证，请使用指纹、面容或安全密钥完成登录。", "Password verified. Use your fingerprint, face or security key to finish signing in.")}</p>
+                {useCode && <Field>
+                  <FieldLabel htmlFor="login-code">{text("动态码或恢复码", "Authenticator or recovery code")}</FieldLabel>
+                  <Input id="login-code" autoComplete="one-time-code" value={code} onChange={event => setCode(event.target.value)} autoFocus />
+                </Field>}
+              </>}
               {error && <p className="text-sm text-danger" role="alert">{error}</p>}
-              <Button
-                type="submit"
-                // Deliberately not disabled when the token is missing: a widget that
-                // fails to load would otherwise leave no way to sign in at all. The
-                // worker rejects a login without a valid token anyway.
-                disabled={busy || password.length === 0}
-                className="mx-auto w-40"
-              >
-                {busy ? t("auth.signingIn") : t("auth.signIn")}
-              </Button>
-              <Button type="button" variant="outline" disabled={busy} onClick={async () => {
+              {(!step || useCode) && <Button type="submit" disabled={busy || (step ? !code.trim() : !password || !username)} className="mx-auto w-40">
+                {busy ? t("auth.signingIn") : step ? text("验证并登录", "Verify and sign in") : t("auth.signIn")}
+              </Button>}
+              {step?.methods.passkey && <Button type="button" variant="outline" disabled={busy} onClick={async () => {
                 setBusy(true)
-                try {
-                  await passkeyLogin()
-                  onDone()
-                } catch {
-                  toast.error(zh ? "通行密钥登录失败或已取消" : "Passkey login failed or cancelled")
-                } finally {
-                  setBusy(false)
-                }
-              }}>
-                {zh ? "使用通行密钥 / 安全密钥登录" : "Sign in with a passkey / security key"}
-              </Button>
+                setError(null)
+                setUseCode(false)
+                try { await verifyPasskey(step) } finally { setBusy(false) }
+              }}>{text("使用通行密钥验证", "Verify with a passkey")}</Button>}
+              {step?.methods.totp && !useCode && <Button type="button" variant="ghost" disabled={busy} onClick={() => { setUseCode(true); setError(null) }}>
+                {text("改用动态码或恢复码", "Use an authenticator or recovery code")}
+              </Button>}
+              {step && <Button type="button" variant="ghost" disabled={busy} onClick={restart}>{text("返回账号密码登录", "Back to password sign-in")}</Button>}
             </FieldGroup>
           </form>
         </CardContent>
