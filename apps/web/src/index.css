@@ -301,6 +301,13 @@
 }
 
 /* Settings portals outside the workspace: its responsive layout is independent. */
+@media (max-width: 1023px) {
+  /* Toasts must leave the fixed workspace navigation available, even while hovered. */
+  .toaster[data-sonner-toaster][data-y-position="bottom"] {
+    bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
 @media (max-width: 767px) {
   .besh-settings {
     width: calc(100vw - 16px); height: calc(100dvh - 16px); max-width: none;
