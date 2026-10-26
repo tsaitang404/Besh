@@ -52,7 +52,7 @@ import {
   renameConversation,
 } from "../domain/ai-history.ts"
 import { readConversationTotals, readDayTotals, recordUsage } from "../domain/ai-usage.ts"
-import { METRICS_COMMAND, parseMetrics } from "../domain/metrics.ts"
+import { METRICS_COMMAND, parseMetrics, type HostMetrics } from "../domain/metrics.ts"
 import { wireEffort } from "../domain/ai-params.ts"
 import { fitToWindow, messagesTokens, promptBudget } from "../domain/context-window.ts"
 import { ConversationScope, type ConversationToken } from "../domain/ai-conversation-scope.ts"
@@ -151,6 +151,7 @@ export class SessionOwner implements DurableObject {
   #inputQueue: Promise<void> = Promise.resolve()
   #cols = 80
   #rows = 24
+  #latestMetrics: { value: HostMetrics; collectedAt: number } | null = null
 
   constructor(state: DurableObjectState, env: SessionEnv) {
     this.#state = state
@@ -716,6 +717,7 @@ export class SessionOwner implements DurableObject {
         return await connection.runCommand(METRICS_COMMAND, { timeoutMs: 8000 })
       })
       const metrics = parseMetrics(stdout)
+      this.#latestMetrics = { value: metrics, collectedAt: Date.now() }
       // The sidebar wants the distribution before the panel is opened, so it is
       // stored the first time we see it rather than shipped with every poll.
       if (metrics.host.os && metrics.host.os !== "—") {
@@ -829,7 +831,11 @@ export class SessionOwner implements DurableObject {
       if (!await this.#ensureAuthorized() || !this.#aiScope.current(token)) return
       let reply: ChatReply
       try {
-        const system: ChatMessage = { role: "system", content: SYSTEM_PROMPT }
+        const recent = this.#latestMetrics
+        const metricsContext = recent && Date.now() - recent.collectedAt < 60_000
+          ? `\n最近一次主机采样（${new Date(recent.collectedAt).toISOString()}）：根分区使用率 ${recent.value.disk.percent ?? "未知"}%，已用 ${recent.value.disk.used ?? "未知"} 字节，总量 ${recent.value.disk.total ?? "未知"} 字节；内存使用率 ${recent.value.memory.percent ?? "未知"}%。采样可能变化，执行前通过工具核实。`
+          : "\n没有近期主机指标，不能凭空判断资源使用情况，需要时调用工具检查。"
+        const system: ChatMessage = { role: "system", content: SYSTEM_PROMPT + metricsContext }
         const budget = promptBudget(provider.contextWindow ?? null, provider.maxOutput ?? null)
         const history = fitToWindow(this.#history, Math.max(1, budget - messagesTokens([system])))
         if (messagesTokens([system, ...history]) > budget) {
@@ -1168,6 +1174,7 @@ export class SessionOwner implements DurableObject {
     this.#binding = null
     const connection = this.#connection
     this.#connection = null
+    this.#latestMetrics = null
     this.#session = null
     const sftp = this.#sftp
     this.#sftp = null
@@ -1216,6 +1223,10 @@ const SYSTEM_PROMPT = [
     "你是 Besh 的服务器助手，通过 SSH 帮助管理员操作 Linux 主机。",
     "需要执行命令时调用 run_command 工具，一次只提议一条命令。",
     "命令会被展示给管理员审批，不要在回复里假装它已经执行。",
+    "收到排查、修复、清理等操作请求时，先调用 run_command 做范围有限的只读检查；能通过检查获得的信息不要先反问用户。遵守用户明确要求只解释、不执行或等待批准的约束。",
+    "例如磁盘清理请求：先检查 df -h 和 df -i，再根据结果逐层检查占用目录及日志、缓存；避免一开始递归扫描整个文件系统。不知道占用来源时不要直接删除。",
+    "根据工具的真实输出继续排查，直至给出明确发现和下一步操作；不要只说将生成命令后就结束。根分区占用达到 90% 属于空间紧张，不能描述为良好。",
+    "删除、截断日志、清缓存或修改配置之前说明具体目标、依据和影响，通过 run_command 提议并遵循系统审批；不擅自删除用户数据。",
     "不要提议交互式命令（如编辑器、需要输入的程序）。",
     "回复使用简体中文，简洁。",
   ].join("\n")
