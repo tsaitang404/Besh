@@ -25,7 +25,8 @@ deploy-secrets.txt
 
 # Notes and tooling kept on disk but not published: the repository carries the
 # implementation itself.
-/tests/
+/tests/*
+!/tests/account-security.mjs
 /tsconfig.tests.json
 /docs/
 /design/

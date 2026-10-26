@@ -1,3 +1,4 @@
+import { handleAccountSecurity } from "./http/account-security.ts"
 import type { WorkersAiBinding } from "./domain/workers-ai.ts"
 import { PROTOCOL_VERSION } from "@besh/contracts"
 import { withFramingProtection } from "./http/security-headers.ts"
@@ -103,6 +104,7 @@ export default {
 } satisfies ExportedHandler<Env>
 
 async function route(request: Request, env: Env, url: URL): Promise<Response | null> {
+  if (url.pathname.startsWith("/api/auth/security/")) return handleAccountSecurity(request, env, url.pathname.slice("/api/auth/security/".length))
   switch (url.pathname) {
     case "/api/auth/bootstrap":
       return request.method === "GET" ? await handleBootstrapStatus(request, env) : await handleBootstrap(request, env)

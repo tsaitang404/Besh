@@ -169,3 +169,21 @@ npx wrangler d1 execute besh --remote --file=db/migrations/0002_workers_ai_budge
 内置模型仅支持文本。每次最多输出 2048 token、上下文 32768 token，不设置应用层每日调用次数上限。D1 仅记录每日调用次数，UTC 零点重新计数；统计失败不会阻止推理。Cloudflare 自身的额度、速率和计费规则仍适用。
 
 命令审批沿用原配置；新增 AI 绑定不会自动放开命令执行。可运行 `node tests/workers-ai.mjs` 验证流式工具调用、取消和调用统计。
+
+### 通行密钥与两步验证
+
+在「设置 → 账户」中管理通行密钥和验证器。通行密钥支持设备指纹、面容、密码管理器及支持用户验证的 FIDO2 实体安全密钥，可直接登录；它绑定注册时的站点域名，域名变更后需要重新注册。
+
+两步验证使用标准 TOTP 验证器（SHA-1、6 位、30 秒）。设置时可手动输入密钥或在本机验证器中打开链接；输入动态码确认后才启用。启用后，密码登录及修改密码都必须同时提供动态码或恢复码。注册通行密钥和关闭两步验证也需要重新验证当前密码和第二因素。通行密钥登录本身要求设备上的用户验证，无需额外输入 TOTP。
+
+启用时会显示 10 个一次性恢复码，请立即保存在安全位置；关闭设置窗口后无法再次查看。每个恢复码只能使用一次。丢失验证器时可使用恢复码登录，再关闭并重新设置验证器，生成新的恢复码。服务器加密保存 TOTP 密钥，仅保存恢复码摘要。密码或安全设置变更会撤销其他登录会话，当前操作成功时会签发新会话。
+
+更新已有部署时，**先应用 D1 迁移，再发布应用**：
+
+```sh
+npx wrangler d1 migrations apply besh --remote
+npm run check
+npx wrangler deploy
+```
+
+需要保留原有 `CREDENTIAL_KEY`。通行密钥需要 HTTPS（本地 localhost 例外），实体安全密钥必须支持 PIN 或生物识别等用户验证。安全回归测试运行 `npm run test:security`；首次运行可用 `npx playwright install chromium` 安装测试浏览器，也可通过 `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` 指定已有 Chromium。

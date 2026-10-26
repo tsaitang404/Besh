@@ -1,3 +1,4 @@
+import { AccountSecurity } from "@/views/account-security"
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Bot, Contrast, Eye, Info, Network, Palette, Settings, ShieldCheck, X, Zap } from "lucide-react"
@@ -120,6 +121,7 @@ export function SettingsDialog({ open, onOpenChange, onPermissionChange }: {
   const [hasKey, setHasKey] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [securityCode, setSecurityCode] = useState("")
   const [currentPassword, setCurrentPassword] = useState("")
   const [nextPassword, setNextPassword] = useState("")
   const [repeatPassword, setRepeatPassword] = useState("")
@@ -268,7 +270,8 @@ export function SettingsDialog({ open, onOpenChange, onPermissionChange }: {
     }
     setBusy(true)
     try {
-      await api.changePassword(currentPassword, nextPassword)
+      await api.changePassword(currentPassword, nextPassword, securityCode)
+      setSecurityCode("")
       setCurrentPassword("")
       setNextPassword("")
       setRepeatPassword("")
@@ -799,6 +802,12 @@ export function SettingsDialog({ open, onOpenChange, onPermissionChange }: {
                       </p>
                     )}
                   </Field>
+                  <Field>
+                    <FieldLabel htmlFor="password-security-code">
+                      {i18n.language.startsWith("zh") ? "动态码或恢复码（已启用两步验证时必填）" : "Authenticator or recovery code (if enabled)"}
+                    </FieldLabel>
+                    <Input id="password-security-code" autoComplete="one-time-code" value={securityCode} onChange={e => setSecurityCode(e.target.value)} />
+                  </Field>
                   <Button
                     type="submit"
                     variant="outline"
@@ -811,6 +820,7 @@ export function SettingsDialog({ open, onOpenChange, onPermissionChange }: {
                   </Button>
                 </FieldGroup>
               </form>
+              <AccountSecurity />
             </TabsContent>
 
             <TabsContent value="about" className="flex flex-col gap-3">

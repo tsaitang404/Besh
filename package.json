@@ -12,6 +12,7 @@
     "node": ">=22.12.0"
   },
   "scripts": {
+    "test:security": "node tests/account-security.mjs",
     "test:regressions": "node tests/deployment-regressions.mjs && node tests/workers-ai.mjs",
     "check": "npm run check:types && npm run check:web && npm run check:bundle",
     "check:types": "tsc -p tsconfig.json --noEmit",

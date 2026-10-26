@@ -154,3 +154,21 @@ assets/               README screenshots
 ## License
 
 Apache-2.0, see [LICENSE](LICENSE).
+
+### Passkeys and two-step verification
+
+Manage passkeys and authenticator verification under **Settings → Account**. Passkeys support device biometrics, password managers and FIDO2 security keys with user verification. They allow direct sign-in with device verification and are bound to the registration hostname. HTTPS is required, with an exception for localhost.
+
+Authenticator setup uses standard TOTP (SHA-1, six digits, 30 seconds). Enter the setup key manually or open the authenticator link, then confirm a code to enable it. Password login and password changes then require an authenticator or recovery code. Managing security also requires the current password and second factor. Passkey sign-in requires device user verification rather than an additional TOTP code.
+
+Save the ten single-use recovery codes shown during enrollment securely; they cannot be viewed again. To replace a lost authenticator, sign in with a recovery code, disable verification and enroll again. TOTP secrets are encrypted with the existing `CREDENTIAL_KEY`; recovery codes are stored as hashes. Password and security changes revoke other sessions and issue a replacement session to the successful caller.
+
+For an existing deployment, apply migrations **before publishing the new application**:
+
+```sh
+npx wrangler d1 migrations apply besh --remote
+npm run check
+npx wrangler deploy
+```
+
+Keep the existing `CREDENTIAL_KEY`. Run `npm run test:security` for security regression and Chromium virtual-authenticator tests. Install the test browser with `npx playwright install chromium`, or set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to an existing Chromium executable.

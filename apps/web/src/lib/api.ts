@@ -113,17 +113,17 @@ export const api = {
     return request("/api/auth/bootstrap", { method: "POST", body: JSON.stringify({ username, password }) })
   },
 
-  login(username: string, password: string, turnstileToken?: string): Promise<{ authenticated: boolean }> {
+  login(username: string, password: string, turnstileToken?: string, code?: string): Promise<{ authenticated: boolean }> {
     return request("/api/auth/login", {
       method: "POST",
-      body: JSON.stringify({ username, password, turnstileToken }),
+      body: JSON.stringify({ username, password, turnstileToken, code }),
     })
   },
 
-  changePassword(currentPassword: string, newPassword: string): Promise<unknown> {
+  changePassword(currentPassword: string, newPassword: string, code?: string): Promise<unknown> {
     return request("/api/auth/password", {
       method: "POST",
-      body: JSON.stringify({ currentPassword, newPassword }),
+      body: JSON.stringify({ currentPassword, newPassword, code }),
     })
   },
 

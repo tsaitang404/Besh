@@ -1,3 +1,4 @@
+import { passkeyLogin } from "@/lib/account-security"
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ChevronDown, ChevronRight, Folder, LogOut, MessageSquare, MoreVertical, Network, Pencil, Plus, Search, Settings, Terminal, Trash2, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
@@ -608,8 +609,10 @@ function Shell({ onSignedOut }: { onSignedOut: () => void }) {
 }
 
 function LoginScreen({ onDone }: { onDone: () => void }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [username, setUsername] = useState(readRememberedUsername)
+  const zh = i18n.language.startsWith("zh")
+  const [code, setCode] = useState("")
   const [password, setPassword] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -635,7 +638,7 @@ function LoginScreen({ onDone }: { onDone: () => void }) {
     event.preventDefault()
     setBusy(true)
     try {
-      await api.login(username, password, needsToken ? token : undefined)
+      await api.login(username, password, needsToken ? token : undefined, code)
       try {
         localStorage.setItem("besh:username", username)
       } catch {
@@ -687,6 +690,12 @@ function LoginScreen({ onDone }: { onDone: () => void }) {
                   autoFocus={username.length > 0}
                 />
               </Field>
+              <Field>
+                <FieldLabel htmlFor="login-code">
+                  {zh ? "动态码或恢复码（如已启用）" : "Authenticator or recovery code (if enabled)"}
+                </FieldLabel>
+                <Input id="login-code" autoComplete="one-time-code" value={code} onChange={e => setCode(e.target.value)} />
+              </Field>
               {gate?.enabled && (
                 <div className="flex justify-center">
                   <Turnstile
@@ -709,6 +718,19 @@ function LoginScreen({ onDone }: { onDone: () => void }) {
                 className="mx-auto w-40"
               >
                 {busy ? t("auth.signingIn") : t("auth.signIn")}
+              </Button>
+              <Button type="button" variant="outline" disabled={busy} onClick={async () => {
+                setBusy(true)
+                try {
+                  await passkeyLogin()
+                  onDone()
+                } catch {
+                  toast.error(zh ? "通行密钥登录失败或已取消" : "Passkey login failed or cancelled")
+                } finally {
+                  setBusy(false)
+                }
+              }}>
+                {zh ? "使用通行密钥 / 安全密钥登录" : "Sign in with a passkey / security key"}
               </Button>
             </FieldGroup>
           </form>

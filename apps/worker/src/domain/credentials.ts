@@ -13,7 +13,7 @@
 
 import { base64ToBytes, bytesToBase64, toBytes } from "./bytes.ts"
 
-export type CredentialKind = "password" | "privateKey" | "aiApiKey" | "turnstileSecret"
+export type CredentialKind = "password" | "privateKey" | "aiApiKey" | "turnstileSecret" | "totpSecret"
 
 export type SealedCredential = {
   /** Envelope schema version, not the key version. */

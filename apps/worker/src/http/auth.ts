@@ -1,3 +1,4 @@
+import { authRateLimit, verifySecondFactor } from "./account-security.ts"
 import type { ApiErrorBody, ErrorCode } from "@besh/contracts"
 
 import {
@@ -40,6 +41,8 @@ function isSecure(request: Request): boolean {
 
 export async function handleLogin(request: Request, env: AuthEnv): Promise<Response> {
   if (request.method !== "POST") return jsonError("INVALID_REQUEST", "Method not allowed", 405)
+
+  if (!await authRateLimit(request, env.DB)) return jsonError("FORBIDDEN", "Too many attempts; try again in five minutes", 429)
 
   let body: unknown
   try {
@@ -84,6 +87,8 @@ export async function handleLogin(request: Request, env: AuthEnv): Promise<Respo
   // password instead of returning immediately.
   const passwordOk = await verifyPassword(password, admin)
   if (!usernameOk || !passwordOk) return jsonError("AUTH_REQUIRED", "Invalid credentials", 401)
+
+  if (!await verifySecondFactor(env, (body as Record<string, unknown>).code)) return jsonError("AUTH_REQUIRED", "Verification code or recovery code required", 401)
 
   const now = Date.now()
   const session = await createSessionToken(now)

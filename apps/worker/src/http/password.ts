@@ -1,3 +1,4 @@
+import { authRateLimit, verifySecondFactor } from "./account-security.ts"
 /**
  * Password change for the single administrator.
  *
@@ -15,11 +16,12 @@ import {
 import { getAdmin, insertSession, updateAdminPassword } from "../domain/admin-store.ts"
 import { jsonError } from "./auth.ts"
 
-export type PasswordEnv = { DB: D1Database }
+export type PasswordEnv = { DB: D1Database; CREDENTIAL_KEY?: string }
 
 export async function handleChangePassword(request: Request, env: PasswordEnv): Promise<Response> {
   if (request.method !== "POST") return jsonError("INVALID_REQUEST", "Method not allowed", 405)
 
+  if (!await authRateLimit(request, env.DB)) return jsonError("FORBIDDEN", "Too many attempts", 429)
   let body: unknown
   try {
     body = await request.json()
@@ -44,6 +46,8 @@ export async function handleChangePassword(request: Request, env: PasswordEnv): 
   const ok = await verifyPassword(currentPassword, admin)
   if (!ok) return jsonError("AUTH_REQUIRED", "The current password is incorrect", 401)
 
+  if (!await verifySecondFactor(env, (body as Record<string, unknown>).code)) return jsonError("AUTH_REQUIRED", "Verification code required", 401)
+
   let record
   try {
     record = await hashPassword(newPassword)
@@ -59,7 +63,7 @@ export async function handleChangePassword(request: Request, env: PasswordEnv): 
   // A later password change must also invalidate this in-flight response.
   const now = Date.now()
   const session = await createSessionToken(now)
-  const inserted = await insertSession(env.DB, { hash: session.hash, createdAt: now, expiresAt: session.expiresAt }, record)
+  const inserted = await insertSession(env.DB, { hash: session.hash, createdAt: now, expiresAt: session.expiresAt }, { ...record, securityVersion: admin.securityVersion + 1 })
   if (!inserted) return jsonError("AUTH_REQUIRED", "Session expired or invalid", 401)
 
   const secure = new URL(request.url).protocol === "https:"
