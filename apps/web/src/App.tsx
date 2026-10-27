@@ -616,7 +616,10 @@ function LoginScreen({ onDone }: { onDone: () => void }) {
   const [password, setPassword] = useState("")
   const [code, setCode] = useState("")
   const [step, setStep] = useState<LoginStep | null>(null)
-  const [useCode, setUseCode] = useState(false)
+  const [passkeyBusy, setPasskeyBusy] = useState(false)
+  const passkeyAttempt = useRef<AbortController | null>(null)
+  const completed = useRef(false)
+  useEffect(() => () => passkeyAttempt.current?.abort(), [])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [gate, setGate] = useState<{ enabled: boolean; siteKey: string } | null>(null)
@@ -628,25 +631,43 @@ function LoginScreen({ onDone }: { onDone: () => void }) {
   }, [])
 
   function done() {
+    if (completed.current) return
+    completed.current = true
     try { localStorage.setItem("besh:username", username) } catch { /* Storage is optional. */ }
     onDone()
   }
 
+  function cancelPasskey() {
+    passkeyAttempt.current?.abort()
+    passkeyAttempt.current = null
+    setPasskeyBusy(false)
+  }
+
   async function verifyPasskey(current: LoginStep) {
+    const controller = new AbortController()
+    passkeyAttempt.current = controller
+    setPasskeyBusy(true)
+    setError(null)
     try {
-      await passkeyLogin(current.stageToken)
-      done()
+      await passkeyLogin(current.stageToken, controller.signal)
+      if (!controller.signal.aborted) done()
     } catch {
-      setUseCode(current.methods.totp)
-      setError(current.methods.totp
-        ? text("通行密钥未完成，请使用验证器动态码或恢复码。", "Passkey verification did not finish. Use an authenticator or recovery code.")
-        : text("通行密钥未完成，请重试或返回重新登录。", "Passkey verification did not finish. Retry or return to sign in again."))
+      if (!controller.signal.aborted && !completed.current) {
+        setError(current.methods.totp
+          ? text("通行密钥未完成，可重试或直接使用动态码、恢复码。", "Passkey verification did not finish. Retry or use an authenticator or recovery code.")
+          : text("通行密钥未完成，请重试或返回重新登录。", "Passkey verification did not finish. Retry or return to sign in again."))
+      }
+    } finally {
+      if (passkeyAttempt.current === controller) {
+        passkeyAttempt.current = null
+        setPasskeyBusy(false)
+      }
     }
   }
 
   function restart() {
     setStep(null)
-    setUseCode(false)
+    cancelPasskey()
     setCode("")
     setError(null)
     setToken("")
@@ -655,6 +676,7 @@ function LoginScreen({ onDone }: { onDone: () => void }) {
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
+    cancelPasskey()
     setBusy(true)
     setError(null)
     try {
@@ -668,8 +690,7 @@ function LoginScreen({ onDone }: { onDone: () => void }) {
       setToken("")
       if (result.authenticated) { done(); return }
       setStep(result)
-      setUseCode(!result.methods.passkey)
-      if (result.methods.passkey) await verifyPasskey(result)
+
     } catch (reason) {
       setError(step
         ? text("验证码无效或登录已过期，请重试或返回重新登录。", "Invalid code or expired sign-in. Retry or return to sign in again.")
@@ -708,26 +729,20 @@ function LoginScreen({ onDone }: { onDone: () => void }) {
                 </div>}
               </> : <>
                 <p className="text-sm font-medium">{text("两步验证", "Two-step verification")}</p>
-                <p className="text-xs text-muted-foreground">{useCode
-                  ? text("输入验证器中的动态码，也可使用一次性恢复码。", "Enter your authenticator code or a single-use recovery code.")
+                <p className="text-xs text-muted-foreground">{step.methods.totp
+                  ? text("输入验证器动态码或恢复码，也可点击下方按钮使用通行密钥。任一方式验证成功即可登录。", "Enter an authenticator or recovery code, or use the passkey button below. Either method completes sign-in.")
                   : text("密码已验证，请使用指纹、面容或安全密钥完成登录。", "Password verified. Use your fingerprint, face or security key to finish signing in.")}</p>
-                {useCode && <Field>
+                {step.methods.totp && <Field>
                   <FieldLabel htmlFor="login-code">{text("动态码或恢复码", "Authenticator or recovery code")}</FieldLabel>
                   <Input id="login-code" autoComplete="one-time-code" value={code} onChange={event => setCode(event.target.value)} autoFocus />
                 </Field>}
               </>}
               {error && <p className="text-sm text-danger" role="alert">{error}</p>}
-              {(!step || useCode) && <Button type="submit" disabled={busy || (step ? !code.trim() : !password || !username)} className="mx-auto w-40">
+              {(!step || step.methods.totp) && <Button type="submit" disabled={busy || (step ? !code.trim() : !password || !username)} className="mx-auto w-40">
                 {busy ? t("auth.signingIn") : step ? text("验证并登录", "Verify and sign in") : t("auth.signIn")}
               </Button>}
-              {step?.methods.passkey && <Button type="button" variant="outline" disabled={busy} onClick={async () => {
-                setBusy(true)
-                setError(null)
-                setUseCode(false)
-                try { await verifyPasskey(step) } finally { setBusy(false) }
-              }}>{text("使用通行密钥验证", "Verify with a passkey")}</Button>}
-              {step?.methods.totp && !useCode && <Button type="button" variant="ghost" disabled={busy} onClick={() => { setUseCode(true); setError(null) }}>
-                {text("改用动态码或恢复码", "Use an authenticator or recovery code")}
+              {step?.methods.passkey && <Button type="button" variant="outline" disabled={busy || passkeyBusy} onClick={() => void verifyPasskey(step)}>
+                {passkeyBusy ? text("正在等待通行密钥，可直接使用验证码", "Waiting for passkey; you can use a code instead") : text("使用通行密钥验证", "Verify with a passkey")}
               </Button>}
               {step && <Button type="button" variant="ghost" disabled={busy} onClick={restart}>{text("返回账号密码登录", "Back to password sign-in")}</Button>}
             </FieldGroup>

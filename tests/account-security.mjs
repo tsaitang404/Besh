@@ -126,7 +126,7 @@ try {
  const page = await context.newPage();
  const cdp = await context.newCDPSession(page);
  await cdp.send('WebAuthn.enable');
- await cdp.send('WebAuthn.addVirtualAuthenticator', { options: { protocol:'ctap2', transport:'usb', hasResidentKey:true, hasUserVerification:true, isUserVerified:true, automaticPresenceSimulation:true } });
+ const { authenticatorId } = await cdp.send('WebAuthn.addVirtualAuthenticator', { options: { protocol:'ctap2', transport:'usb', hasResidentKey:true, hasUserVerification:true, isUserVerified:true, automaticPresenceSimulation:true } });
  await page.goto(origin);
  const result = await page.evaluate(async ({password}) => {
   const post = async (path, body) => {
@@ -221,16 +221,25 @@ try {
  await page.getByLabel('账户', {exact:true}).fill('admin');
  await page.getByLabel('密码', {exact:true}).fill(password);
  await page.getByRole('button',{name:'登录',exact:true}).click();
+ await page.locator('#login-code').waitFor();
+ await page.getByRole('button',{name:'使用通行密钥验证',exact:true}).click();
  await page.getByRole('button',{name:'设置',exact:true}).waitFor();
- // A cancelled/unavailable passkey must fall back to the authenticator step.
+ // A pending passkey request must never block authenticator input. must fall back to the authenticator step.
  await context.clearCookies();
- await page.route('**/api/auth/security/passkey/options',route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{message:'Passkey unavailable in this test'}})}));
+ let releasePasskeyOptions;
+ await page.route('**/api/auth/security/passkey/options',async route=>{
+  await new Promise(resolve=>releasePasskeyOptions=resolve);
+  await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{message:'Delayed passkey request'}})}).catch(()=>{});
+ });
  await page.goto(origin+'/ui');
  assert.equal(await page.locator('#login-code').count(),0);
  await page.getByLabel('账户', {exact:true}).fill('admin');
  await page.getByLabel('密码', {exact:true}).fill(password);
  await page.getByRole('button',{name:'登录',exact:true}).click();
  await page.locator('#login-code').waitFor();
+ await page.getByRole('button',{name:'使用通行密钥验证',exact:true}).click();
+ await page.getByRole('button',{name:'正在等待通行密钥，可直接使用验证码',exact:true}).waitFor();
+ assert.equal(await page.locator('#login-code').isEnabled(),true,'pending passkey request must not disable code input');
  assert.equal(await page.locator('#password').count(),0, 'second step does not retain password field');
  await page.locator('#login-code').fill('invalid');
  await page.getByRole('button',{name:'验证并登录',exact:true}).click();
@@ -239,6 +248,25 @@ try {
  await page.locator('#login-code').fill(uiRecovery.recoveryCodes[0]);
  await page.getByRole('button',{name:'验证并登录',exact:true}).click();
  await page.getByRole('button',{name:'设置',exact:true}).waitFor();
- console.log('PASS: built UI hides OTP until password succeeds, setup button explains reauthentication, passkey-first login succeeds, unavailable passkey falls back to OTP/recovery, invalid code remains unauthenticated');
+ releasePasskeyOptions();
+ await page.unroute('**/api/auth/security/passkey/options');
+ // Keep the actual WebAuthn ceremony pending, then complete with a code.
+ await context.clearCookies();
+ await cdp.send('WebAuthn.setAutomaticPresenceSimulation',{authenticatorId,enabled:false});
+ await page.goto(origin+'/ui');
+ await page.getByLabel('账户',{exact:true}).fill('admin');
+ await page.getByLabel('密码',{exact:true}).fill(password);
+ await page.getByRole('button',{name:'登录',exact:true}).click();
+ await page.locator('#login-code').waitFor();
+ const waitingForAuthenticator=page.waitForRequest('**/api/auth/security/passkey/options');
+ await page.getByRole('button',{name:'使用通行密钥验证',exact:true}).click();
+ await waitingForAuthenticator;
+ await page.getByRole('button',{name:'正在等待通行密钥，可直接使用验证码',exact:true}).waitFor();
+ await page.locator('#login-code').fill(uiRecovery.recoveryCodes[1]);
+ assert.equal(await page.getByRole('button',{name:'验证并登录',exact:true}).isEnabled(),true);
+ await page.getByRole('button',{name:'验证并登录',exact:true}).click();
+ await page.getByRole('button',{name:'设置',exact:true}).waitFor();
+ assert.equal(await page.getByRole('alert').count(),0,'cancelled passkey must not overwrite successful code sign-in');
+ console.log('PASS: code input immediately available after password, explicit passkey succeeds, pending options and pending WebAuthn do not block code sign-in, late passkey errors cannot overwrite success');
 
 } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }
