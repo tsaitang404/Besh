@@ -96,7 +96,8 @@ export class IncomingPacketQueue {
               (data, sequence, aad, commit) => cipher.decrypt(data, sequence, aad, commit),
               cipher.aead,
               cipher.macLength,
-              cipher.verify ? (packetBytes, mac, sequence) => cipher.verify!(packetBytes, mac, sequence) : undefined
+              cipher.verify ? (packetBytes, mac, sequence) => cipher.verify!(packetBytes, mac, sequence) : undefined,
+              cipher.etm
             )
           : // Plaintext: identity transform, no MAC and no auth tag.
             await this.#parser.nextPacket(this.#blockSize, (data) => data, false, 0)

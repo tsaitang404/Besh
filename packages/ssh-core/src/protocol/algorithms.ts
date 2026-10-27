@@ -13,6 +13,8 @@ export const SUPPORTED_ENCRYPTION_ALGORITHMS = [
 ];
 
 export const SUPPORTED_MAC_ALGORITHMS = [
+  'hmac-sha2-256-etm@openssh.com',
+  'hmac-sha2-512-etm@openssh.com',
   'hmac-sha2-256',
   'hmac-sha2-512',
 ];
@@ -26,6 +28,7 @@ export interface CipherSpec {
 }
 
 export interface MacSpec {
+  etm?: boolean;
   length: number;
   keyLength: number;
 }
@@ -39,6 +42,8 @@ const CIPHER_SPECS: Record<string, CipherSpec> = {
 };
 
 const MAC_SPECS: Record<string, MacSpec> = {
+  'hmac-sha2-256-etm@openssh.com': { length: 32, keyLength: 32, etm: true },
+  'hmac-sha2-512-etm@openssh.com': { length: 64, keyLength: 64, etm: true },
   none: { length: 0, keyLength: 32 },
   'hmac-sha2-256': { length: 32, keyLength: 32 },
   'hmac-sha2-512': { length: 64, keyLength: 64 },

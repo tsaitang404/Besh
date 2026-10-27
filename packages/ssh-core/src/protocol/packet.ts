@@ -118,9 +118,33 @@ export class SSHPacketParser {
     data: Uint8Array, seq: number, aad?: Uint8Array, commit?: boolean
   ) => Uint8Array | Promise<Uint8Array | null> | null, hasAuthTag: boolean = false,
   macLength: number = 0,
-  verifyMac?: (packet: Uint8Array, mac: Uint8Array, seq: number) => boolean | Promise<boolean>): Promise<SSHPacket | null> {
+  verifyMac?: (packet: Uint8Array, mac: Uint8Array, seq: number) => boolean | Promise<boolean>,
+  etm: boolean = false): Promise<SSHPacket | null> {
     if (!Number.isInteger(blockSize) || blockSize < 4) {
       throw new Error(`Invalid SSH cipher block size ${blockSize}`);
+    }
+
+    if (etm) {
+      if (!verifyMac || macLength <= 0) throw new Error('EtM requires a MAC verifier');
+      const lengthBytes = this.peekBytes(4);
+      if (!lengthBytes) return null;
+      const packetLength = readUint32(lengthBytes, 0);
+      if (packetLength < MIN_PACKET_LENGTH || packetLength > MAX_PACKET_SIZE || packetLength % blockSize !== 0) {
+        throw new Error(`Invalid EtM packet length ${packetLength}`);
+      }
+      const totalSize = 4 + packetLength;
+      const raw = this.peekBytes(totalSize + macLength);
+      if (!raw) return null;
+      // Authenticate the clear length and ciphertext before touching cipher state.
+      const mac = raw.subarray(totalSize);
+      if (!await verifyMac(raw.subarray(0, totalSize), mac, this.seqNum)) throw new Error('Invalid packet MAC');
+      const body = await decrypt(raw.subarray(4, totalSize), this.seqNum, undefined, true);
+      if (!body || body.length !== packetLength) throw new Error('EtM packet decryption failed');
+      const paddingLength = body[0];
+      if (paddingLength < 4 || paddingLength >= packetLength) throw new Error('Invalid EtM padding length');
+      this.consumeBytes(totalSize + macLength);
+      this.seqNum = nextSequenceNumber(this.seqNum);
+      return { length: packetLength, paddingLength, payload: body.subarray(1, packetLength - paddingLength), mac };
     }
 
     if (hasAuthTag) {
@@ -238,7 +262,8 @@ export class SSHPacketBuilder {
     encrypt: ((data: Uint8Array, seq: number, aad?: Uint8Array) => Uint8Array | Promise<Uint8Array>) | null,
     seqNum: number,
     hasAuthTag: boolean = false,
-    mac?: (packet: Uint8Array, seq: number) => Uint8Array | Promise<Uint8Array>
+    mac?: (packet: Uint8Array, seq: number) => Uint8Array | Promise<Uint8Array>,
+    etm: boolean = false
   ): Promise<Uint8Array> {
     return SSHPacketBuilder.buildWithPayloadWriter(
       payload.length,
@@ -247,7 +272,8 @@ export class SSHPacketBuilder {
       encrypt,
       seqNum,
       hasAuthTag,
-      mac
+      mac,
+      etm
     );
   }
 
@@ -258,14 +284,15 @@ export class SSHPacketBuilder {
     encrypt: ((data: Uint8Array, seq: number, aad?: Uint8Array) => Uint8Array | Promise<Uint8Array>) | null,
     seqNum: number,
     hasAuthTag: boolean = false,
-    mac?: (packet: Uint8Array, seq: number) => Uint8Array | Promise<Uint8Array>
+    mac?: (packet: Uint8Array, seq: number) => Uint8Array | Promise<Uint8Array>,
+    etm: boolean = false
   ): Promise<Uint8Array> {
     const packetLength = 1 + payloadLength;
     // For AES-GCM (hasAuthTag), padding aligns the encrypted portion
     // (padding_length + payload + padding) to blockSize.
     // The 4-byte packet_length is AAD, NOT part of the encrypted data.
     // For non-GCM, padding aligns the full packet (4 + data) to blockSize.
-    const alignBase = hasAuthTag
+    const alignBase = hasAuthTag || etm
       ? (1 + payloadLength) % blockSize      // encrypted portion only
       : (4 + packetLength) % blockSize;        // full packet including length
     const paddingNeeded = blockSize - (alignBase || blockSize);
@@ -285,7 +312,19 @@ export class SSHPacketBuilder {
 
     crypto.getRandomValues(packet.subarray(5 + payloadLength));
 
+    if (etm && (!encrypt || !mac)) throw new Error('EtM requires encryption and MAC');
     if (encrypt) {
+      if (etm) {
+        const encrypted = await encrypt(packet.subarray(4), seqNum);
+        const framed = new Uint8Array(4 + encrypted.length);
+        framed.set(packet.subarray(0, 4));
+        framed.set(encrypted, 4);
+        const tag = await mac!(framed, seqNum);
+        const result = new Uint8Array(framed.length + tag.length);
+        result.set(framed);
+        result.set(tag, framed.length);
+        return result;
+      }
       if (hasAuthTag) {
         const lengthField = packet.subarray(0, 4);
         const dataToEncrypt = packet.subarray(4);

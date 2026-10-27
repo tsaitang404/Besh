@@ -160,10 +160,10 @@ export class SSHHMAC {
 
   constructor(algorithm: string, rawKey: Uint8Array) {
     this.rawKey = rawKey;
-    if (algorithm === 'hmac-sha2-256') {
+    if (algorithm === 'hmac-sha2-256' || algorithm === 'hmac-sha2-256-etm@openssh.com') {
       this.hash = 'SHA-256';
       this.length = 32;
-    } else if (algorithm === 'hmac-sha2-512') {
+    } else if (algorithm === 'hmac-sha2-512' || algorithm === 'hmac-sha2-512-etm@openssh.com') {
       this.hash = 'SHA-512';
       this.length = 64;
     } else {

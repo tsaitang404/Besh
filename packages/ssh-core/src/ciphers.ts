@@ -16,6 +16,7 @@ export type Direction = "c2s" | "s2c"
 export type DirectionalCipher = {
   readonly blockSize: number
   readonly aead: boolean
+  readonly etm?: boolean
   readonly macLength: number
   encrypt(data: Uint8Array, sequence: number, aad?: Uint8Array, commit?: boolean): Promise<Uint8Array>
   decrypt(
@@ -98,6 +99,7 @@ export async function createDirectionalCipher(options: {
     blockSize: spec.blockSize,
     aead: false,
     macLength: hmac.length,
+    etm: macSpec.etm === true,
     encrypt: (data, sequence, aad, commit) => cipher.encrypt(data, sequence, aad, commit),
     decrypt: (data, sequence, aad, commit) => cipher.decrypt(data, sequence, aad, commit),
     sign: (packet, sequence) => hmac.sign(packet, sequence),

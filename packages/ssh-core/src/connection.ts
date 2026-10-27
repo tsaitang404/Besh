@@ -656,7 +656,8 @@ export class SshConnection {
           (data, sequence, aad) => cipher.encrypt(data, sequence, aad),
           this.#sendSequence,
           cipher.aead,
-          cipher.sign ? (packet, sequence) => cipher.sign!(packet, sequence) : undefined
+          cipher.sign ? (packet, sequence) => cipher.sign!(packet, sequence) : undefined,
+          cipher.etm
         )
       : await SSHPacketBuilder.build(payload, 8, null, this.#sendSequence)
     this.#bytesSinceRekey += framed.byteLength
