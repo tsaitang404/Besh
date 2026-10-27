@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
+import { readTurnstileConfig, publicTurnstile, describeTurnstile, openTurnstileSecret, writeTurnstileConfig } from '../apps/worker/src/domain/turnstile.ts';
 import { totp, matchTotp } from '../apps/worker/src/domain/totp.ts';
 import { createAdmin, getAdmin, insertSession, updateAdminPassword } from '../apps/worker/src/domain/admin-store.ts';
 import { hashPassword, createSessionToken, hashSessionToken } from '../apps/worker/src/domain/auth.ts';
@@ -20,7 +21,29 @@ const db = {
 };
 const password = 'test-password-only', key = crypto.getRandomValues(new Uint8Array(32));
 const env = { DB: db, CREDENTIAL_KEY: Buffer.from(key).toString('base64') };
+// Deployment-owned Turnstile credentials are sealed and cannot leak through either API shape.
+const managedEnv = { ...env, TURNSTILE_SITE_KEY: 'test-site-key', TURNSTILE_SECRET: 'test-turnstile-secret' };
+const managedGate = await readTurnstileConfig(db, managedEnv);
+assert.equal(managedGate.managed, true);
+assert.deepEqual(publicTurnstile(managedGate), {enabled:true,siteKey:'test-site-key'});
+assert.ok(!JSON.stringify(managedGate).includes(managedEnv.TURNSTILE_SECRET));
+assert.ok(!JSON.stringify(describeTurnstile(managedGate)).includes(managedEnv.TURNSTILE_SECRET));
+assert.equal(await openTurnstileSecret(managedGate,key), managedEnv.TURNSTILE_SECRET);
+await assert.rejects(readTurnstileConfig(db, {...env, TURNSTILE_SITE_KEY:'incomplete'}));
+await assert.rejects(readTurnstileConfig(db, {...env, TURNSTILE_SECRET:'incomplete'}));
+await writeTurnstileConfig(db,{enabled:false,siteKey:'saved-db-key',secret:'saved-db-secret'},key);
+assert.equal((await readTurnstileConfig(db,managedEnv)).siteKey,'test-site-key');
+assert.equal((await readTurnstileConfig(db)).siteKey,'saved-db-key');
 await createAdmin(db, { ...await hashPassword(password), username: 'admin' });
+const originalFetch = globalThis.fetch;
+try {
+ globalThis.fetch = async (_url, init) => Response.json({success:init.body.get('secret') === managedEnv.TURNSTILE_SECRET && init.body.get('response') === 'valid-human-token'});
+ const managedLogin = input => handleLogin(new Request('https://besh.test/api/auth/login',{method:'POST',body:JSON.stringify({username:'admin',password,...input})}),managedEnv);
+ assert.equal((await managedLogin({})).status,400,'human verification precedes password login');
+ assert.equal((await managedLogin({turnstileToken:'invalid'})).status,400);
+ assert.equal((await managedLogin({turnstileToken:'valid-human-token'})).status,200);
+} finally { globalThis.fetch = originalFetch; }
+console.log('PASS: deployment Turnstile secrets sealed, public APIs redact secrets, incomplete config fails closed, valid human verification required before login');
 let admin = await getAdmin(db), session = await createSessionToken();
 await insertSession(db, { hash: session.hash, createdAt: Date.now(), expiresAt: session.expiresAt }, admin);
 const request = (path, body, cookie = session.token) => new Request(`https://besh.test/api/auth/security/${path}`, { method: 'POST', headers: { Cookie: `besh_session=${cookie}` }, body: JSON.stringify(body) });

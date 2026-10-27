@@ -3,6 +3,7 @@ main = "apps/worker/src/index.ts"
 
 # Secrets (set with `wrangler secret put`, or .dev.vars locally):
 #   CREDENTIAL_KEY, TICKET_SECRET
+#   Optional: TURNSTILE_SITE_KEY + TURNSTILE_SECRET enable deployment-managed human verification.
 #   CREDENTIAL_KEY is the base64 of a 32-byte AES-256 key; generate it once
 #   and never rotate it without re-sealing, or stored credentials become unreadable.
 compatibility_date = "2026-10-01"

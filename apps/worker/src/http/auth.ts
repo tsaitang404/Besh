@@ -13,7 +13,7 @@ import {
 } from "../domain/auth.ts"
 import { StoreError, createAdmin, findLiveSession, getAdmin, insertSession, deleteSession, pruneExpiredSessions } from "../domain/admin-store.ts"
 import { hashSessionToken } from "../domain/auth.ts"
-import { openTurnstileSecret, publicTurnstile, readTurnstileConfig, verifyTurnstile } from "../domain/turnstile.ts"
+import { openTurnstileSecret, publicTurnstile, readTurnstileConfig, verifyTurnstile, type TurnstileEnvironment } from "../domain/turnstile.ts"
 import { readCredentialKey } from "../domain/credential-key.ts"
 import { json } from "./response.ts"
 
@@ -24,7 +24,7 @@ import { json } from "./response.ts"
  * evidence) is readable on its own.
  */
 
-export type AuthEnv = { DB: D1Database; CREDENTIAL_KEY?: string }
+export type AuthEnv = TurnstileEnvironment & { DB: D1Database; CREDENTIAL_KEY?: string }
 
 export function jsonError(code: ErrorCode, message: string, status: number): Response {
   const body: ApiErrorBody = { error: { code, message } }
@@ -61,7 +61,7 @@ export async function handleLogin(request: Request, env: AuthEnv): Promise<Respo
 
   // Before the password is hashed: a request that is not a browser should not cost
   // PBKDF2 time, and the answer must not depend on whether the account exists.
-  const gate = await readTurnstileConfig(env.DB)
+  const gate = await readTurnstileConfig(env.DB, env)
   const publicGate = publicTurnstile(gate)
   if (publicGate.enabled) {
     const credentialKey = readCredentialKey(env)

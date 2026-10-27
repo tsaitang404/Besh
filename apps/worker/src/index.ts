@@ -45,6 +45,8 @@ export type Env = {
   /** Base64 32-byte AES key for sealed credentials; a Worker secret in production. */
   CREDENTIAL_KEY: string
   CREDENTIAL_KEY_VERSION?: string
+  TURNSTILE_SITE_KEY?: string
+  TURNSTILE_SECRET?: string
   /** AI attachment bytes; only ids travel over the session socket. */
   ATTACHMENTS: AttachmentStore
   /** Overridable for tests; production uses DNS over HTTPS. */

@@ -6,12 +6,20 @@
  * envelope as credentials and never leaves the worker, so the login page only ever
  * learns whether the challenge is on and which site key to render.
  */
+import { readCredentialKey } from "./credential-key.ts"
 import { openCredential, sealCredential, type SealedCredential } from "./credentials.ts"
 
 export type TurnstileConfig = {
   enabled: boolean
   siteKey: string
   secretSealed?: SealedCredential
+  managed?: boolean
+}
+
+export type TurnstileEnvironment = {
+  CREDENTIAL_KEY?: string
+  TURNSTILE_SITE_KEY?: string
+  TURNSTILE_SECRET?: string
 }
 
 /** What the login page may know. Never the secret. */
@@ -28,7 +36,20 @@ export class TurnstileError extends Error {
   }
 }
 
-export async function readTurnstileConfig(db: D1Database): Promise<TurnstileConfig> {
+export async function readTurnstileConfig(db: D1Database, env: TurnstileEnvironment = {}): Promise<TurnstileConfig> {
+  // Deployment-owned credentials take priority; never silently disable a partial configuration.
+  const siteKey = env.TURNSTILE_SITE_KEY?.trim() ?? ""
+  const secret = env.TURNSTILE_SECRET?.trim() ?? ""
+  if (siteKey || secret) {
+    const key = readCredentialKey(env)
+    if (!siteKey || !secret || !key) throw new TurnstileError("Deployment Turnstile configuration is incomplete")
+    return {
+      enabled: true,
+      siteKey,
+      managed: true,
+      secretSealed: await sealCredential(key, secret, { serverId: AAD_ID, kind: AAD_KIND, keyVersion: 1 }),
+    }
+  }
   const row = await db.prepare("SELECT value FROM settings WHERE key = ?").bind(SETTING_KEY).first<{ value: string }>()
   if (!row) return { enabled: false, siteKey: "" }
   try {
@@ -86,8 +107,9 @@ export function describeTurnstile(config: TurnstileConfig): {
   enabled: boolean
   siteKey: string
   hasSecret: boolean
+  managed: boolean
 } {
-  return { enabled: config.enabled, siteKey: config.siteKey, hasSecret: Boolean(config.secretSealed) }
+  return { enabled: config.enabled, siteKey: config.siteKey, hasSecret: Boolean(config.secretSealed), managed: config.managed === true }
 }
 
 /** Opens the sealed secret; only the login path calls this. */

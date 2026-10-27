@@ -314,7 +314,7 @@ export type UiSettings = {
 }
 
 /** What the settings dialog is allowed to see: never the secret itself. */
-type TurnstileState = { enabled: boolean; siteKey: string; hasSecret: boolean }
+type TurnstileState = { enabled: boolean; siteKey: string; hasSecret: boolean; managed?: boolean }
 
 /** Asked by the login form before a session exists; deliberately unauthenticated. */
 export async function turnstileConfig(): Promise<TurnstileConfig> {

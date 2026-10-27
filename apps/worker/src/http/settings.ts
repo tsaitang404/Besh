@@ -16,11 +16,11 @@ import {
   writeUiSettings,
 } from "../domain/settings-store.ts"
 import { describeProvider, readProviderConfig, resolveProviderEndpoint, writeProviderConfig, ProviderError } from "../domain/ai-provider.ts"
-import { describeTurnstile, publicTurnstile, readTurnstileConfig, writeTurnstileConfig, TurnstileError } from "../domain/turnstile.ts"
+import { describeTurnstile, publicTurnstile, readTurnstileConfig, writeTurnstileConfig, TurnstileError, type TurnstileEnvironment } from "../domain/turnstile.ts"
 import { readCredentialKey } from "../domain/credential-key.ts"
 import { jsonError } from "./auth.ts"
 
-export type SettingsEnv = {
+export type SettingsEnv = TurnstileEnvironment & {
   AI?: WorkersAiBinding
   DB: D1Database
   CREDENTIAL_KEY?: string
@@ -36,7 +36,7 @@ function aiConfigured(env: SettingsEnv): boolean {
 
 export async function handleGetSettings(env: SettingsEnv): Promise<Response> {
   const provider = describeProvider(await readProviderConfig(env.DB))
-  const turnstile = describeTurnstile(await readTurnstileConfig(env.DB))
+  const turnstile = describeTurnstile(await readTurnstileConfig(env.DB, env))
   return Response.json(
     {
       ...(await readSettings(env.DB, aiConfigured(env) || provider.configured)),
@@ -62,6 +62,10 @@ export async function handlePutSettings(request: Request, env: SettingsEnv): Pro
     aiProvider?: { baseUrl?: unknown; model?: unknown; apiKey?: unknown; params?: unknown }
     turnstile?: { enabled?: unknown; siteKey?: unknown; secret?: unknown }
     ui?: { theme?: unknown; language?: unknown; terminalFont?: unknown }
+  }
+
+  if (parsed.turnstile && (env.TURNSTILE_SITE_KEY || env.TURNSTILE_SECRET)) {
+    return jsonError("INVALID_REQUEST", "Turnstile is managed by deployment secrets", 409)
   }
 
   // the provider and the permission can be saved independently
@@ -116,7 +120,7 @@ export async function handlePutSettings(request: Request, env: SettingsEnv): Pro
   }
 
   const provider = describeProvider(await readProviderConfig(env.DB))
-  const turnstile = describeTurnstile(await readTurnstileConfig(env.DB))
+  const turnstile = describeTurnstile(await readTurnstileConfig(env.DB, env))
   return Response.json(
     {
       ...(await readSettings(env.DB, aiConfigured(env) || provider.configured)),
@@ -183,6 +187,6 @@ export async function handleListModels(env: SettingsEnv): Promise<Response> {
  * the widget would be given in the HTML.
  */
 export async function handleTurnstileConfig(env: SettingsEnv): Promise<Response> {
-  const config = publicTurnstile(await readTurnstileConfig(env.DB))
+  const config = publicTurnstile(await readTurnstileConfig(env.DB, env))
   return Response.json(config, { headers: { "Cache-Control": "no-store" } })
 }

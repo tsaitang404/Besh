@@ -111,6 +111,7 @@ export function SettingsDialog({ open, onOpenChange, onPermissionChange }: {
   const [gateOn, setGateOn] = useState(false)
   const [gateSiteKey, setGateSiteKey] = useState("")
   const [gateSecret, setGateSecret] = useState("")
+  const [gateManaged, setGateManaged] = useState(false)
   const [gateHasSecret, setGateHasSecret] = useState(false)
   const [modelPickerOpen, setModelPickerOpen] = useState(false)
   // Collapsed, the card is one line: the model in use. Its limits are noise until
@@ -139,6 +140,7 @@ export function SettingsDialog({ open, onOpenChange, onPermissionChange }: {
       setModel(settings.aiProvider.model)
       setContextWindow(formatTokenCount(settings.aiProvider.params.contextWindow))
       setMaxOutput(formatTokenCount(settings.aiProvider.params.maxOutput))
+      setGateManaged(settings.turnstile.managed === true)
       setGateOn(settings.turnstile.enabled)
       setGateSiteKey(settings.turnstile.siteKey)
       setGateHasSecret(settings.turnstile.hasSecret)
@@ -703,7 +705,9 @@ export function SettingsDialog({ open, onOpenChange, onPermissionChange }: {
             <TabsContent value="security" className="flex flex-col gap-3">
               <h3 className="text-[15px] font-semibold">{t("settings.sections.security")}</h3>
               <p className="-mt-1 text-[13px] text-muted-foreground">{t("settings.gateHint")}</p>
+              {gateManaged && <p className="text-[13px] text-muted-foreground" role="status">{i18n.language.startsWith("zh") ? "人机验证由 Cloudflare Worker 部署密钥管理，已启用。" : "Human verification is enabled and managed by Cloudflare Worker deployment secrets."}</p>}
               <form onSubmit={saveGate} className="mt-1">
+                <fieldset disabled={gateManaged}>
                 <FieldGroup>
                   <Field>
                     <FieldLabel>{t("settings.gateEnable")}</FieldLabel>
@@ -753,6 +757,7 @@ export function SettingsDialog({ open, onOpenChange, onPermissionChange }: {
                     {t("settings.gateSave")}
                   </Button>
                 </FieldGroup>
+                </fieldset>
               </form>
             </TabsContent>
 
