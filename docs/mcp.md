@@ -53,8 +53,16 @@ The first acceptance probe checked tool transport success without checking the r
 
 ## Direct command control
 
-At the owner's request, command access uses the single `command_exec(serverId, command, timeoutSeconds?, maxOutputBytes?)` tool. No proposal, human approval step or separate limited SSH account is involved. It uses that server's existing stored SSH account, including whatever sudo privileges the account already has. Production grants this tool only to the `besh-portal` principal on minius; other hosts remain inaccessible.
+At the owner's request, command access uses the single `command_exec(serverId, command, timeoutSeconds?, maxOutputBytes?)` tool. No proposal, human approval step or separate limited SSH account is involved. It uses that server's existing stored SSH account, including whatever sudo privileges the account already has. Production grants this tool to the `besh-portal` principal on all eight currently configured hosts.
 
 CF Access, Besh per-server grants, pinned host keys, credential isolation, concurrent-operation limits and auditing still apply. Commands are passed intentionally as shell commands; this is full account control, not a command allowlist or sandbox. Audit records contain only the SHA-256 command hash, identity, target, result and timing, not command text/output. Default command timeout is 15 seconds, maximum 30 seconds, output up to 64 KiB. Nonzero or missing exit codes return `isError:true`. Long-running background processes and completed writes are not rolled back by a connection timeout or permission revocation.
 
 The previously deployed approval-runner schema remains as additive migration history, but its UI, tools and runtime have been removed. No approval jobs were started. The temporary dedicated account/key and seed secret are retired separately.
+
+## Background commands
+
+`command_start(serverId, command, timeoutSeconds?)` returns a task ID after detached launch. Default runtime is one hour, maximum 24 hours. `command_poll(serverId, taskId, offset?, maxOutputBytes?)` returns status, combined stdout/stderr, nextOffset and exit code; pass nextOffset on the next call. Use outputBase64 when exact bytes matter across UTF-8 boundaries. `command_cancel(serverId, taskId)` kills the process group. No approval or separate SSH account is involved.
+
+The host needs Linux /proc, sh, setsid, nohup, timeout and base64. Jobs survive an MCP/SSH disconnect but not a host restart. Each task uses a private /tmp/besh-mcp-<taskId> directory. Output is limited with a per-file ulimit (8 MiB on Linux); a writer exceeding it may terminate. Lookup metadata expires after seven days; remote files are not automatically deleted and can be removed after retrieving results. A start_unknown response must be reconciled by polling the returned ID, never blindly retried. Cancellation affects the original process group; commands deliberately detaching or changing privilege may escape it.
+
+Every start, poll and cancel revalidates current machine identity, host grant and pinned SSH key. Task lookup is scoped to the creating principal and server. Removing access blocks further calls and output retrieval; it does not terminate an already detached host process. Portal callers still share the upstream principal.

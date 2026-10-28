@@ -13,7 +13,7 @@
   },
   "scripts": {
     "test:security": "npm run check:web && node tests/account-security.mjs",
-    "test:regressions": "node tests/mcp-security.mjs && node tests/ssh-etm.mjs && node tests/deployment-regressions.mjs && node tests/workers-ai.mjs",
+    "test:regressions": "node tests/mcp-security.mjs && node tests/mcp-background.mjs && node tests/ssh-etm.mjs && node tests/deployment-regressions.mjs && node tests/workers-ai.mjs",
     "check": "npm run check:types && npm run check:web && npm run check:bundle",
     "check:types": "tsc -p tsconfig.json --noEmit",
     "check:bundle": "wrangler deploy --dry-run --outdir .wrangler/build",

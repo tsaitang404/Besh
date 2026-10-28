@@ -1,4 +1,4 @@
-export const MCP_TOOLS = ['servers_list', 'server_status', 'diagnostic_run', 'command_exec'] as const
+export const MCP_TOOLS = ['servers_list', 'server_status', 'diagnostic_run', 'command_exec', 'command_start', 'command_poll', 'command_cancel'] as const
 export type McpTool = typeof MCP_TOOLS[number]
 export type MachineAgent = { id: string; name: string; access_common_name: string; enabled: number; expires_at: number; version: number }
 export async function findAgent(db: D1Database, commonName: string): Promise<MachineAgent | null> {

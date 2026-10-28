@@ -16,7 +16,7 @@ export const DIAGNOSTICS = {
   memory: SYSTEM_PATH + 'command free -k',
 } as const
 export type DiagnosticName = keyof typeof DIAGNOSTICS
-export async function inspectServer(env: { DB: D1Database; CREDENTIAL_KEY: string }, agent: MachineAgent, serverId: string, tool: 'server_status' | 'diagnostic_run' | 'command_exec', diagnostic?: DiagnosticName, command?: { command: string; timeoutSeconds: number; maxOutputBytes: number }): Promise<unknown> {
+export async function inspectServer(env: { DB: D1Database; CREDENTIAL_KEY: string }, agent: MachineAgent, serverId: string, tool: 'server_status' | 'diagnostic_run' | 'command_exec' | 'command_start' | 'command_poll' | 'command_cancel', diagnostic?: DiagnosticName, command?: { command: string; timeoutSeconds: number; maxOutputBytes: number }): Promise<unknown> {
   await checkGrant(env.DB, agent, serverId, tool)
   const stored = await getServerSecret(env.DB, serverId)
   if (!stored?.server.fingerprint) throw new Error('HOST_KEY_NOT_TRUSTED')
