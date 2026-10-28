@@ -53,3 +53,9 @@ crons = ["17 4 * * *"]
 
 [ai]
 binding = "AI"
+
+# Machine MCP access is independent of human login. Set false for immediate rollback.
+[vars]
+MCP_ENABLED = "true"
+MCP_ACCESS_ISSUER = "https://neold.cloudflareaccess.com"
+MCP_ACCESS_AUD = "f33786b3ff0752499672902c02297299e17978e4d57c2ab432ec9b8c316fc4f2"

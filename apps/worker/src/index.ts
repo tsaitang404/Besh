@@ -1,3 +1,6 @@
+import { handleMcpAdmin } from "./http/mcp-admin.ts"
+import { handleMcp } from "./http/mcp.ts"
+import type { McpAccessEnv } from "./domain/mcp-access.ts"
 import { handleAccountSecurity } from "./http/account-security.ts"
 import type { WorkersAiBinding } from "./domain/workers-ai.ts"
 import { PROTOCOL_VERSION } from "@besh/contracts"
@@ -36,7 +39,7 @@ import {
 } from "./http/groups.ts"
 export { SessionOwner } from "./do/session.ts"
 
-export type Env = {
+export type Env = McpAccessEnv & {
   AI?: WorkersAiBinding
   DB: D1Database
   ASSETS: Fetcher
@@ -63,6 +66,8 @@ export type Env = {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)
+
+    if (url.pathname === "/mcp") return handleMcp(request, env)
 
     if (url.pathname === "/api/health") {
       if (request.method !== "GET") return jsonError("INVALID_REQUEST", "Method not allowed", 405)
@@ -93,6 +98,10 @@ export default {
    * delays a user, and a failure here is logged rather than retried into a loop.
    */
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(env.DB.batch([
+      env.DB.prepare("DELETE FROM mcp_leases WHERE expires_at<?").bind(Date.now()),
+      env.DB.prepare("DELETE FROM mcp_audit WHERE created_at<?").bind(Date.now()-90*86400000),
+    ]))
     ctx.waitUntil(
       sweepOrphanAttachments(env.DB, env.ATTACHMENTS)
         .then((sweep) =>
@@ -121,6 +130,12 @@ async function route(request: Request, env: Env, url: URL): Promise<Response | n
     }
     case "/api/auth/session":
       return await handleSession(request, env)
+  }
+
+  if (url.pathname.startsWith("/api/mcp/")) {
+    const denied = await requireAdmin(request, env)
+    if (denied) return denied
+    return handleMcpAdmin(request, env, url.pathname)
   }
 
   // Everything below touches the inventory and needs a live session.
