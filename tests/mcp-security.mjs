@@ -34,6 +34,13 @@ try {
  assert.equal((await call('diagnostic_run',{serverId:'s1',diagnostic:'system'})).content[0].text,'HOST_KEY_NOT_TRUSTED');
  assert.equal((await (await handleMcp(request('tools/call',{name:'diagnostic_run',arguments:{serverId:'s1',diagnostic:'system',command:'rm -rf /'}}),env)).json()).error.code,-32602);
  assert.equal((await (await handleMcp(request('tools/call',{name:'diagnostic_run',arguments:{serverId:'s1',diagnostic:'__proto__'}}),env)).json()).error.code,-32602);
+ // Removing a scope takes effect immediately without a new initialize or token.
+ sql.prepare('DELETE FROM mcp_grants WHERE agent_id=? AND tool=?').run(agent.id,'server_status');
+ assert.equal((await call('server_status',{serverId:'s1'})).content[0].text,'ACCESS_DENIED');
+ sql.prepare('INSERT INTO mcp_leases(id,agent_id,expires_at) VALUES(?,?,?)').run('busy1',agent.id,Date.now()+10000);
+ sql.prepare('INSERT INTO mcp_leases(id,agent_id,expires_at) VALUES(?,?,?)').run('busy2',agent.id,Date.now()+10000);
+ assert.equal((await call('servers_list')).content[0].text,'CONCURRENCY_LIMIT');
+ sql.prepare('DELETE FROM mcp_leases').run();
  const update=await handleMcpAdmin(adminReq('PUT',{...configure,enabled:false,version:1}),env,'/api/mcp/agents/'+agent.id);assert.equal(update.status,200);
  assert.equal((await handleMcp(request('tools/list'),env)).status,403);assert.equal((await handleMcp(request('tools/call',{name:'servers_list'}),env)).status,403);
  const stale=await handleMcpAdmin(adminReq('PUT',{...configure,version:1}),env,'/api/mcp/agents/'+agent.id);assert.equal(stale.status,409);

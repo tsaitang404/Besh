@@ -38,3 +38,11 @@ To roll back, disable MCP or disable agent records, then remove the Besh Portal 
 ## Verification
 
 `node tests/mcp-security.mjs` tests JWT validation, permissions, revocation, malformed/extra arguments, host-key pinning and audit redaction using synthetic identities. Production acceptance additionally requires calls through Access and the Portal: allowed inventory/diagnostic, denied other server, disable agent, reuse the existing client session and observe denial, restore only the intended final grant set.
+
+## Production acceptance — 2026-10-28
+
+Deployed to `ssh.sadd.ing/mcp` and registered as `besh` in the existing `mcp.sadd.ing` Portal, preserving SDE, Trilium and Vaultwarden. Portal upstream reports `ready` / `connected` with all three tools. Separate 30-day service identities were created for Portal-origin access and acceptance/direct access, with credentials stored only in Portal and permission-600 operator configuration on soul.
+
+The initial grant set covers **minius only**. Both direct Access and a machine Portal session successfully listed only minius, verified its pinned SSH host key and ran a fixed diagnostic. A request for soul was denied. On the same existing Portal session, disabling `besh-portal` caused an upstream 403; restoring it recovered inventory. Removing only minius's `server_status` grant then returned `ACCESS_DENIED`; restoring the grant recovered the live SSH probe. Intended permissions were restored after testing. Existing human authentication/FIDO2/Turnstile tests also passed.
+
+The Portal path intentionally reports the shared `besh-portal` identity; individual Portal clients do not gain independent downstream identity from this first release. Existing OAuth client sessions may need their server selection refreshed to add Besh.

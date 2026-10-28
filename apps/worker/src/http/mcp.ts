@@ -22,7 +22,8 @@ export async function handleMcp(request: Request, env: McpEnv): Promise<Response
   if (!commonName) return error(null, -32000, 'Machine authentication required', 401)
   const agent = await findAgent(env.DB, commonName)
   if (!agent) {
-    await audit(env.DB, { agentId: null, tool: 'authentication', outcome: 'denied', started: Date.now() })
+    const known = await env.DB.prepare('SELECT id FROM mcp_agents WHERE access_common_name=?').bind(commonName).first<{id:string}>()
+    await audit(env.DB, { agentId: known?.id ?? null, tool: 'authentication', outcome: 'denied', started: Date.now() })
     return error(null, -32000, 'Machine access denied', 403)
   }
   if (request.method !== 'POST') return new Response(null, { status: 405, headers: { Allow: 'POST' } })
