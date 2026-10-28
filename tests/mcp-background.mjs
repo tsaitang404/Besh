@@ -5,7 +5,7 @@ import { rmSync } from 'node:fs'
 import { startScript, pollScript } from '../apps/worker/src/domain/mcp-background.ts'
 const ids=[]
 const run=script=>execFileSync('sh',['-c',script],{encoding:'utf8'})
-const poll=(id,offset=0,cancel=false)=>run(pollScript(id,offset,1024,cancel)).trim().split('\n')
+const poll=(id,offset=0,cancel=false)=>run(pollScript(id,offset,1024,cancel)).split('BESH_TASK_V1\n')[1].trim().split('\n')
 try {
  const id=randomUUID();ids.push(id)
  assert.match(run(startScript(id,"printf 'first'; sleep 3; printf 'last'; exit 7",30)),/started/)

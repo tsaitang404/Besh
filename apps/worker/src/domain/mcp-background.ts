@@ -39,6 +39,7 @@ ${cancel ? `if [ ! -f exit ] && [ ! -f cancelled ]; then
  kill -KILL "-$pid" 2>/dev/null || true
  fi
 fi` : ''}
+printf '\nBESH_TASK_V1\n'
 if [ -f cancelled ]; then printf 'cancelled\\n-\\n'; elif [ -f exit ]; then printf 'completed\\n'; cat exit; elif [ -f pid ]; then read -r pid < pid; if kill -0 "$pid" 2>/dev/null; then printf 'running\\n-\\n'; else printf 'lost\\n-\\n'; fi; else printf 'lost\\n-\\n'; fi
 wc -c < output
 command dd if=output bs=1 skip=${offset} count=${maxBytes} 2>/dev/null | base64
@@ -68,7 +69,10 @@ export async function backgroundCommand(env: { DB: D1Database; CREDENTIAL_KEY: s
   const offset = Number(args.offset ?? 0), maxBytes = Number(args.maxOutputBytes ?? 16384)
   const result = await inspectServer(env, agent, serverId, tool, undefined, { command: pollScript(taskId, offset, maxBytes, tool === 'command_cancel'), timeoutSeconds: 8, maxOutputBytes: 100000 }) as { exitCode: number | null; stdout: string }
   if (result.exitCode !== 0) return { taskId, serverId, status: result.exitCode === 74 ? 'lost' : 'query_failed', exitCode: null }
-  const [status, exit, length, ...encoded] = result.stdout.trim().split('\n')
+  const marker = result.stdout.lastIndexOf('\nBESH_TASK_V1\n')
+  if (marker < 0) throw new Error('INVALID_TASK_RESPONSE')
+  const [status, exit, length, ...encoded] = result.stdout.slice(marker+'\nBESH_TASK_V1\n'.length).trim().split('\n')
+  if (!['running','completed','cancelled','lost'].includes(status) || !/^\d+$/.test(length) || (exit !== '-' && !/^\d+$/.test(exit))) throw new Error('INVALID_TASK_RESPONSE')
   const binary = atob(encoded.join('').replaceAll(/\s/g, ''))
   const bytes = Uint8Array.from(binary, c => c.charCodeAt(0))
   return { taskId, serverId, status, exitCode: exit === '-' ? null : Number(exit), output: new TextDecoder().decode(bytes), outputBase64: btoa(binary), offset, nextOffset: offset+bytes.length, totalOutputBytes: Number(length), hasMore: Number(length)>offset+bytes.length, pollIntervalMs: 2000 }
