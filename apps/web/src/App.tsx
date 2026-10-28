@@ -160,6 +160,8 @@ function Shell({ onSignedOut }: { onSignedOut: () => void }) {
   const [activeKey, setActiveKey] = useState<string | null>(null)
   const [mobilePane, setMobilePane] = useState<"servers" | "terminal" | "files" | "assistant">("servers")
   const session = sessions.find((item) => item.key === activeKey) ?? null
+  // An empty workspace must never keep the server list hidden on small screens.
+  const visiblePane = session ? mobilePane : "servers"
   /** Read by callbacks that must not re-create themselves on every session change. */
   const sessionsRef = useRef<OpenSession[]>([])
   sessionsRef.current = sessions
@@ -296,7 +298,7 @@ function Shell({ onSignedOut }: { onSignedOut: () => void }) {
   }
 
   return (
-    <div className="besh-shell flex h-dvh bg-background text-foreground" data-mobile-pane={mobilePane}>
+    <div className="besh-shell flex h-dvh bg-background text-foreground" data-mobile-pane={visiblePane}>
       <div className="besh-shell-main flex min-w-0 flex-1 flex-col">
       <header className="flex h-11 shrink-0 items-center border-b border-border">
         <div className="besh-brand flex h-full w-60 shrink-0 items-center justify-between border-r border-border pl-4 pr-[11px]">
@@ -546,7 +548,7 @@ function Shell({ onSignedOut }: { onSignedOut: () => void }) {
           ["files", Folder, "app.mobileFiles"],
           ["assistant", MessageSquare, "app.mobileAssistant"],
         ] as const).map(([pane, Icon, label]) => (
-          <button key={pane} type="button" aria-current={mobilePane === pane ? "page" : undefined}
+          <button key={pane} type="button" aria-current={visiblePane === pane ? "page" : undefined}
             disabled={pane !== "servers" && !session} onClick={() => setMobilePane(pane)}>
             <Icon size={20} aria-hidden="true" /><span>{t(label)}</span>
           </button>
