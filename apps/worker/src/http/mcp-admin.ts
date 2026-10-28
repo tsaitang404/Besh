@@ -22,7 +22,8 @@ export async function handleMcpAdmin(request: Request, env: { DB: D1Database }, 
     input = JSON.parse(text)
     if (!input || Array.isArray(input)) throw new Error()
   } catch { return jsonError('INVALID_REQUEST', 'Expected a small JSON object', 400) }
-  const { name, commonName, enabled, expiresAt, grants, version } = input
+  const { name, commonName, enabled, expiresAt, grants, version, canCreateServers } = input
+  if(canCreateServers!==undefined && typeof canCreateServers!=='boolean')return jsonError('INVALID_REQUEST','Invalid create permission',400)
   if (typeof name !== 'string' || !name.trim() || name.length > 100 || typeof commonName !== 'string' || !/^[a-zA-Z0-9_-]{1,128}\.access$/.test(commonName) || typeof enabled !== 'boolean' || typeof expiresAt !== 'number' || !Number.isSafeInteger(expiresAt) || expiresAt <= Date.now() || expiresAt > Date.now()+366*86400000 || !Array.isArray(grants) || grants.length > 300) return jsonError('INVALID_REQUEST', 'Invalid agent configuration', 400)
   const agentId = id ?? crypto.randomUUID(), now = Date.now(), nonce = crypto.randomUUID()
   if (id) {
@@ -32,7 +33,7 @@ export async function handleMcpAdmin(request: Request, env: { DB: D1Database }, 
   }
   const unique = new Set<string>()
   for (const g of grants) {
-    if (!g || typeof g.serverId !== 'string' || !(MCP_TOOLS as readonly unknown[]).includes(g.tool) || unique.has(`${g.serverId}:${g.tool}`)) return jsonError('INVALID_REQUEST', 'Invalid or duplicate grant', 400)
+    if (!g || typeof g.serverId !== 'string' || (!(MCP_TOOLS as readonly unknown[]).includes(g.tool) || g.tool==='server_create') || unique.has(`${g.serverId}:${g.tool}`)) return jsonError('INVALID_REQUEST', 'Invalid or duplicate grant', 400)
     unique.add(`${g.serverId}:${g.tool}`)
     if (!await env.DB.prepare('SELECT id FROM servers WHERE id=?').bind(g.serverId).first()) return jsonError('INVALID_REQUEST', 'Unknown server', 400)
   }
@@ -40,10 +41,10 @@ export async function handleMcpAdmin(request: Request, env: { DB: D1Database }, 
   if (collision) return jsonError('INVALID_REQUEST', 'Machine identity already bound', 409)
   const statements: D1PreparedStatement[] = []
   if (id) {
-    statements.push(env.DB.prepare('UPDATE mcp_agents SET name=?,access_common_name=?,enabled=?,expires_at=?,version=version+1,updated_at=?,config_nonce=? WHERE id=? AND version=?').bind(name.trim(), commonName, enabled?1:0, expiresAt, now, nonce, id, version))
+    statements.push(env.DB.prepare('UPDATE mcp_agents SET name=?,access_common_name=?,enabled=?,expires_at=?,version=version+1,updated_at=?,config_nonce=?,can_create_servers=COALESCE(?,can_create_servers) WHERE id=? AND version=?').bind(name.trim(), commonName, enabled?1:0, expiresAt, now, nonce, canCreateServers===undefined?null:canCreateServers?1:0, id, version))
     // Version check is repeated in each statement so stale concurrent updates cannot replace grants.
     statements.push(env.DB.prepare('DELETE FROM mcp_grants WHERE agent_id=? AND EXISTS(SELECT 1 FROM mcp_agents WHERE id=? AND config_nonce=?)').bind(id,id,nonce))
-  } else statements.push(env.DB.prepare('INSERT INTO mcp_agents(id,name,access_common_name,enabled,expires_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?)').bind(agentId,name.trim(),commonName,enabled?1:0,expiresAt,now,now))
+  } else statements.push(env.DB.prepare('INSERT INTO mcp_agents(id,name,access_common_name,enabled,expires_at,created_at,updated_at,can_create_servers) VALUES(?,?,?,?,?,?,?,?)').bind(agentId,name.trim(),commonName,enabled?1:0,expiresAt,now,now,canCreateServers?1:0))
   for (const g of grants) statements.push(env.DB.prepare('INSERT INTO mcp_grants(agent_id,server_id,tool) SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM mcp_agents WHERE id=? AND config_nonce=?)').bind(agentId,g.serverId,g.tool,agentId,id?nonce:''))
   const results = await env.DB.batch(statements)
   if (!results[0].meta.changes) return jsonError('INVALID_REQUEST', 'Concurrent agent update', 409)

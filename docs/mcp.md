@@ -66,3 +66,11 @@ The previously deployed approval-runner schema remains as additive migration his
 The host needs Linux /proc, sh, setsid, nohup, timeout and base64. Jobs survive an MCP/SSH disconnect but not a host restart. Each task uses a private /tmp/besh-mcp-<taskId> directory. Output is limited with a per-file ulimit (8 MiB on Linux); a writer exceeding it may terminate. Lookup metadata expires after seven days; remote files are not automatically deleted and can be removed after retrieving results. A start_unknown response must be reconciled by polling the returned ID, never blindly retried. Cancellation affects the original process group; commands deliberately detaching or changing privilege may escape it.
 
 Every start, poll and cancel revalidates current machine identity, host grant and pinned SSH key. Task lookup is scoped to the creating principal and server. Removing access blocks further calls and output retrieval; it does not terminate an already detached host process. Portal callers still share the upstream principal.
+
+## Inventory management
+
+`server_create(requestId, name, host, port?, username, authMethod, credential, fingerprint)` adds a host with encrypted credentials and a supplied trusted SHA256 fingerprint. It does not test login or accept a discovered key automatically. The creating machine gets all nine per-host tools. Reuse requestId after a lost response; retries return the same host without overwriting anything. The separate canCreateServers administrator capability defaults off and is enabled for the existing besh-portal identity.
+
+`server_update(serverId, version, name, host, port?, username, authMethod, fingerprint, credential?)` replaces public configuration and optionally credentials. Omitting credential preserves the sealed secret; changing authentication method requires a new credential. `servers_list` now includes public configuration and version. Stale versions fail with VERSION_CONFLICT.
+
+`server_delete(serverId, version)` removes the inventory record, host grants and task lookup metadata. It does not delete the actual host, stop detached processes or erase remote task files. Cancel tasks before removing a host if required. Audit history is retained. Existing read-only machine identities acquire no new management rights.
