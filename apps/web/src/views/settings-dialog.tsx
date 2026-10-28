@@ -1,4 +1,3 @@
-import { McpJobsPanel } from "./mcp-jobs-panel"
 import { AccountSecurity } from "@/views/account-security"
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -327,7 +326,7 @@ export function SettingsDialog({ open, onOpenChange, onPermissionChange }: {
           </Button>
         </div>
 
-        <Tabs orientation={compact ? "horizontal" : "vertical"} defaultValue={window.location.hash === "#mcp-jobs" ? "mcp" : "appearance"} className="besh-settings-tabs min-h-0 min-w-0 flex-1 gap-0">
+        <Tabs orientation={compact ? "horizontal" : "vertical"} defaultValue="appearance" className="besh-settings-tabs min-h-0 min-w-0 flex-1 gap-0">
           <TabsList
             variant="line"
             className="besh-settings-nav min-h-full w-[248px] shrink-0 flex-col items-stretch justify-start gap-0 border-r border-border bg-card p-2"
@@ -348,7 +347,6 @@ export function SettingsDialog({ open, onOpenChange, onPermissionChange }: {
               <Lock className="size-[18px]" aria-hidden="true" />
               {t("settings.sections.security")}
             </TabsTrigger>
-            <TabsTrigger value="mcp" className={TAB}>MCP</TabsTrigger>
             <TabsTrigger value="account" className={TAB}>
               <ShieldCheck className="size-[18px]" aria-hidden="true" />
               {t("settings.sections.account")}
@@ -763,7 +761,6 @@ export function SettingsDialog({ open, onOpenChange, onPermissionChange }: {
               </form>
             </TabsContent>
 
-            <TabsContent value="mcp"><McpJobsPanel /></TabsContent>
             <TabsContent value="account" className="flex flex-col gap-3">
               <h3 className="text-[15px] font-semibold">{t("settings.sections.account")}</h3>
               <p className="-mt-1 text-[13px] text-muted-foreground">{t("settings.accountHint")}</p>

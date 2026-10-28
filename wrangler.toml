@@ -60,10 +60,11 @@ MCP_ENABLED = "true"
 MCP_ACCESS_ISSUER = "https://neold.cloudflareaccess.com"
 MCP_ACCESS_AUD = "f33786b3ff0752499672902c02297299e17978e4d57c2ab432ec9b8c316fc4f2"
 
-[[durable_objects.bindings]]
-name = "COMMAND_JOBS"
-class_name = "CommandJob"
-
+# Retain deployment history; the unused approval runner has been retired.
 [[migrations]]
 tag = "v2-command-jobs"
 new_sqlite_classes = ["CommandJob"]
+
+[[migrations]]
+tag = "v3-direct-commands"
+deleted_classes = ["CommandJob"]

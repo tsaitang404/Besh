@@ -9,7 +9,7 @@ for (const exitCode of [127, 1, null, undefined]) assert.equal(mcpToolResult('di
 assert.equal(mcpToolResult('diagnostic_run',{exitCode:0,stdout:'Linux'}).isError,false);
 assert.equal(mcpToolResult('server_status',{reachable:true}).isError,false);
 const sql=new DatabaseSync(':memory:');
-for(const name of ['0001_init.sql','0004_mcp.sql','0005_mcp_commands.sql'])sql.exec(readFileSync(new URL('../db/migrations/'+name,import.meta.url),'utf8'));
+for(const name of ['0001_init.sql','0004_mcp.sql','0005_mcp_commands.sql','0006_direct_mcp_commands.sql'])sql.exec(readFileSync(new URL('../db/migrations/'+name,import.meta.url),'utf8'));
 const db={prepare(q){let v=[];return {bind(...x){v=x;return this},async first(){return sql.prepare(q).get(...v)||null},async all(){return {results:sql.prepare(q).all(...v)}},async run(){return {meta:{changes:Number(sql.prepare(q).run(...v).changes)}}}}},async batch(statements){sql.exec('BEGIN');try{const r=[];for(const s of statements)r.push(await s.run());sql.exec('COMMIT');return r}catch(e){sql.exec('ROLLBACK');throw e}}};
 const {privateKey,publicKey}=await generateKeyPair('RS256');const jwk={...await exportJWK(publicKey),kid:'test-key',alg:'RS256'};
 const originalFetch=globalThis.fetch;globalThis.fetch=async url=>{assert.equal(String(url),'https://besh-test.cloudflareaccess.com/cdn-cgi/access/certs');return Response.json({keys:[jwk]})};
@@ -44,6 +44,10 @@ try {
  sql.prepare('INSERT INTO mcp_leases(id,agent_id,expires_at) VALUES(?,?,?)').run('busy2',agent.id,Date.now()+10000);
  assert.equal((await call('servers_list')).content[0].text,'CONCURRENCY_LIMIT');
  sql.prepare('DELETE FROM mcp_leases').run();
+ const execDenied=await call('command_exec',{serverId:'s1',command:'id'});assert.equal(execDenied.content[0].text,'ACCESS_DENIED');
+ sql.prepare('INSERT INTO mcp_grants VALUES(?,?,?)').run(agent.id,'s1','command_exec');
+ assert.equal((await call('command_exec',{serverId:'s1',command:'id'})).content[0].text,'HOST_KEY_NOT_TRUSTED');
+ for(const args of [{command:'id',timeoutSeconds:31},{command:'id',approve:true},{command:'',timeoutSeconds:1}])assert.equal((await (await handleMcp(request('tools/call',{name:'command_exec',arguments:{serverId:'s1',...args}}),env)).json()).error.code,-32602);
  const update=await handleMcpAdmin(adminReq('PUT',{...configure,enabled:false,version:1}),env,'/api/mcp/agents/'+agent.id);assert.equal(update.status,200);
  assert.equal((await handleMcp(request('tools/list'),env)).status,403);assert.equal((await handleMcp(request('tools/call',{name:'servers_list'}),env)).status,403);
  const stale=await handleMcpAdmin(adminReq('PUT',{...configure,version:1}),env,'/api/mcp/agents/'+agent.id);assert.equal(stale.status,409);

@@ -132,12 +132,6 @@ export const api = {
     return request("/api/auth/logout", { method: "POST" })
   },
 
-  mcpJobs(): Promise<{jobs: McpJob[]}> { return request('/api/mcp/jobs') },
-  reviewMcpJob(id:string, commandHash:string, decision:'approve'|'reject'):Promise<unknown> {
-    return request(`/api/mcp/jobs/${id}/review`,{method:'POST',body:JSON.stringify({commandHash,decision})})
-  },
-  cancelMcpJob(id:string):Promise<unknown> {return request(`/api/mcp/jobs/${id}/cancel`,{method:'POST'})},
-
   async settings(): Promise<{
     aiPermission: Permission
     aiConfigured: boolean
@@ -333,12 +327,4 @@ export async function trustHostKey(serverId: string, fingerprint: string): Promi
     method: "POST",
     body: JSON.stringify({ fingerprint }),
   })
-}
-
-export type McpJob = {
- id:string;agent_id:string;server_id:string;status:string;command:string|null;command_hash:string;
- timeout_seconds:number;max_output_bytes:number;created_at:number;expires_at:number;approval_expires_at:number|null;
- approved_by:string|null;cancel_requested:number;outcome:string|null;
- target:{host:string;port:number;username:string;fingerprint:string};
- result:{stdout?:string;exitCode?:number|null;droppedBytes?:number;remoteStopConfirmed?:boolean}|null;
 }

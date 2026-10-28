@@ -201,7 +201,7 @@ function Shell({ onSignedOut }: { onSignedOut: () => void }) {
 
   const [deleting, setDeleting] = useState<Server | null>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
-  const [settingsOpen, setSettingsOpen] = useState(() => window.location.hash === "#mcp-jobs")
+  const [settingsOpen, setSettingsOpen] = useState(false)
   /**
    * Whether the workspace has portalled the inspector content in yet.
    *

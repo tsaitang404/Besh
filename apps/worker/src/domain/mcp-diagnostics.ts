@@ -16,7 +16,7 @@ export const DIAGNOSTICS = {
   memory: SYSTEM_PATH + 'command free -k',
 } as const
 export type DiagnosticName = keyof typeof DIAGNOSTICS
-export async function inspectServer(env: { DB: D1Database; CREDENTIAL_KEY: string }, agent: MachineAgent, serverId: string, tool: 'server_status' | 'diagnostic_run', diagnostic?: DiagnosticName): Promise<unknown> {
+export async function inspectServer(env: { DB: D1Database; CREDENTIAL_KEY: string }, agent: MachineAgent, serverId: string, tool: 'server_status' | 'diagnostic_run' | 'command_exec', diagnostic?: DiagnosticName, command?: { command: string; timeoutSeconds: number; maxOutputBytes: number }): Promise<unknown> {
   await checkGrant(env.DB, agent, serverId, tool)
   const stored = await getServerSecret(env.DB, serverId)
   if (!stored?.server.fingerprint) throw new Error('HOST_KEY_NOT_TRUSTED')
@@ -37,18 +37,18 @@ export async function inspectServer(env: { DB: D1Database; CREDENTIAL_KEY: strin
     checking = true
     void checkGrant(env.DB, agent, serverId, tool).catch(() => { revoked = true; void connection.close() }).finally(() => { checking = false })
   }, 1000)
-  const deadline = setTimeout(() => { void connection.close() }, 25000)
+  const deadline = setTimeout(() => { void connection.close() }, tool === 'command_exec' ? 45000 : 25000)
   try {
     await connection.connect()
     await checkGrant(env.DB, agent, serverId, tool)
     if (tool === 'server_status') return { serverId, reachable: true, hostKeyVerified: true, authenticated: false }
     const key = readCredentialKey(env)
-    if (!key || !diagnostic) throw new Error('DIAGNOSTIC_UNAVAILABLE')
+    if (!key || (!diagnostic && !command)) throw new Error('DIAGNOSTIC_UNAVAILABLE')
     const secret = await openCredential(key, stored.credential, { serverId, kind: stored.server.authMethod === 'publickey' ? 'privateKey' : 'password' })
     if (stored.server.authMethod === 'publickey') await connection.authenticateWithKey({ username: stored.server.username, privateKey: secret })
     else await connection.authenticate({ username: stored.server.username, password: secret })
     await checkGrant(env.DB, agent, serverId, tool)
-    const output = await connection.runCommand(DIAGNOSTICS[diagnostic], { timeoutMs: 8000, maxOutputBytes: 8192 })
+    const output = await connection.runCommand(command ? command.command : DIAGNOSTICS[diagnostic!], { timeoutMs: command ? command.timeoutSeconds*1000 : 8000, maxOutputBytes: command ? command.maxOutputBytes : 8192 })
     await checkGrant(env.DB, agent, serverId, tool)
     if (revoked) throw new Error('ACCESS_DENIED')
     return { serverId, diagnostic, ...output }
