@@ -9,7 +9,7 @@ for (const exitCode of [127, 1, null, undefined]) assert.equal(mcpToolResult('di
 assert.equal(mcpToolResult('diagnostic_run',{exitCode:0,stdout:'Linux'}).isError,false);
 assert.equal(mcpToolResult('server_status',{reachable:true}).isError,false);
 const sql=new DatabaseSync(':memory:');
-for(const name of ['0001_init.sql','0004_mcp.sql'])sql.exec(readFileSync(new URL('../db/migrations/'+name,import.meta.url),'utf8'));
+for(const name of ['0001_init.sql','0004_mcp.sql','0005_mcp_commands.sql'])sql.exec(readFileSync(new URL('../db/migrations/'+name,import.meta.url),'utf8'));
 const db={prepare(q){let v=[];return {bind(...x){v=x;return this},async first(){return sql.prepare(q).get(...v)||null},async all(){return {results:sql.prepare(q).all(...v)}},async run(){return {meta:{changes:Number(sql.prepare(q).run(...v).changes)}}}}},async batch(statements){sql.exec('BEGIN');try{const r=[];for(const s of statements)r.push(await s.run());sql.exec('COMMIT');return r}catch(e){sql.exec('ROLLBACK');throw e}}};
 const {privateKey,publicKey}=await generateKeyPair('RS256');const jwk={...await exportJWK(publicKey),kid:'test-key',alg:'RS256'};
 const originalFetch=globalThis.fetch;globalThis.fetch=async url=>{assert.equal(String(url),'https://besh-test.cloudflareaccess.com/cdn-cgi/access/certs');return Response.json({keys:[jwk]})};

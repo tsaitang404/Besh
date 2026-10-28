@@ -1,4 +1,4 @@
-export const MCP_TOOLS = ['servers_list', 'server_status', 'diagnostic_run'] as const
+export const MCP_TOOLS = ['servers_list', 'server_status', 'diagnostic_run', 'command_submit', 'command_start', 'command_status', 'command_cancel'] as const
 export type McpTool = typeof MCP_TOOLS[number]
 export type MachineAgent = { id: string; name: string; access_common_name: string; enabled: number; expires_at: number; version: number }
 export async function findAgent(db: D1Database, commonName: string): Promise<MachineAgent | null> {
@@ -9,6 +9,6 @@ export async function checkGrant(db: D1Database, agent: MachineAgent, serverId: 
     .bind(agent.id, Date.now(), agent.version, serverId, tool).first()
   if (!row) throw new Error('ACCESS_DENIED')
 }
-export async function audit(db: D1Database, input: { agentId: string | null; tool: string; serverId?: string; diagnostic?: string; outcome: string; started: number }): Promise<void> {
-  await db.prepare('INSERT INTO mcp_audit(id,agent_id,tool,server_id,diagnostic,outcome,created_at,duration_ms) VALUES(?,?,?,?,?,?,?,?)').bind(crypto.randomUUID(), input.agentId, input.tool, input.serverId ?? null, input.diagnostic ?? null, input.outcome, Date.now(), Date.now()-input.started).run()
+export async function audit(db: D1Database, input: { agentId: string | null; tool: string; serverId?: string; diagnostic?: string; outcome: string; started: number; jobId?: string }): Promise<void> {
+  await db.prepare('INSERT INTO mcp_audit(id,agent_id,tool,server_id,diagnostic,outcome,created_at,duration_ms,job_id) VALUES(?,?,?,?,?,?,?,?,?)').bind(crypto.randomUUID(), input.agentId, input.tool, input.serverId ?? null, input.diagnostic ?? null, input.outcome, Date.now(), Date.now()-input.started, input.jobId ?? null).run()
 }

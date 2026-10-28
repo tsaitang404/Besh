@@ -37,12 +37,15 @@ import {
   handleListGroups,
   handleRenameGroup,
 } from "./http/groups.ts"
+export { CommandJob } from "./do/command-job.ts"
 export { SessionOwner } from "./do/session.ts"
 
 export type Env = McpAccessEnv & {
   AI?: WorkersAiBinding
   DB: D1Database
   ASSETS: Fetcher
+  MCP_EXEC_PROFILE_SEED?: string
+  COMMAND_JOBS: DurableObjectNamespace
   SESSIONS: DurableObjectNamespace
   TICKET_SECRET: string
   /** Base64 32-byte AES key for sealed credentials; a Worker secret in production. */
@@ -99,6 +102,10 @@ export default {
    */
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(env.DB.batch([
+      env.DB.prepare("UPDATE mcp_jobs SET status='expired',finished_at=? WHERE status IN ('pending','approved') AND (expires_at<? OR (status='approved' AND approval_expires_at<?))").bind(Date.now(),Date.now(),Date.now()),
+      env.DB.prepare("UPDATE mcp_jobs SET status='interrupted',outcome='RUNNER_INTERRUPTED',finished_at=? WHERE status IN ('queued','running') AND coalesce(started_at,created_at)+(timeout_seconds+60)*1000<?").bind(Date.now(),Date.now()),
+      env.DB.prepare("UPDATE mcp_jobs SET command_sealed=NULL,result_sealed=NULL WHERE finished_at IS NOT NULL AND finished_at<?").bind(Date.now()-86400000),
+      env.DB.prepare("DELETE FROM mcp_jobs WHERE created_at<? AND status NOT IN ('queued','running')").bind(Date.now()-90*86400000),
       env.DB.prepare("DELETE FROM mcp_leases WHERE expires_at<?").bind(Date.now()),
       env.DB.prepare("DELETE FROM mcp_audit WHERE created_at<?").bind(Date.now()-90*86400000),
     ]))

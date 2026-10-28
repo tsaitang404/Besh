@@ -1,8 +1,11 @@
+import { handleJobAdmin } from './mcp-job-admin.ts'
+import type { JobEnv } from '../domain/mcp-jobs.ts'
 import { MCP_TOOLS, audit } from '../domain/mcp-store.ts'
 import { jsonError } from './auth.ts'
 
 /** Called only after the normal human administrator session and origin checks. */
-export async function handleMcpAdmin(request: Request, env: { DB: D1Database }, path: string): Promise<Response> {
+export async function handleMcpAdmin(request: Request, env: JobEnv, path: string): Promise<Response> {
+  if(path.startsWith('/api/mcp/jobs'))return handleJobAdmin(request,env,path)
   if (path === '/api/mcp/audit' && request.method === 'GET') {
     const rows = await env.DB.prepare('SELECT * FROM mcp_audit ORDER BY created_at DESC LIMIT 100').all()
     return Response.json({ events: rows.results }, { headers: { 'Cache-Control': 'no-store' } })
