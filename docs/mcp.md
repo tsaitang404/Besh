@@ -46,3 +46,7 @@ Deployed to `ssh.sadd.ing/mcp` and registered as `besh` in the existing `mcp.sad
 The initial grant set covers **minius only**. Both direct Access and a machine Portal session successfully listed only minius, verified its pinned SSH host key and ran a fixed diagnostic. A request for soul was denied. On the same existing Portal session, disabling `besh-portal` caused an upstream 403; restoring it recovered inventory. Removing only minius's `server_status` grant then returned `ACCESS_DENIED`; restoring the grant recovered the live SSH probe. Intended permissions were restored after testing. Existing human authentication/FIDO2/Turnstile tests also passed.
 
 The Portal path intentionally reports the shared `besh-portal` identity; individual Portal clients do not gain independent downstream identity from this first release. Existing OAuth client sessions may need their server selection refreshed to add Besh.
+
+### NixOS diagnostic correction
+
+The first acceptance probe checked tool transport success without checking the remote exit code. A current-chat probe found minius returned exit code 127 because `/usr/bin/uname` and `/usr/bin/uptime` do not exist on NixOS. Diagnostics now use a fixed root-managed system PATH including the NixOS system profile. Nonzero, missing or null exit codes return MCP `isError:true` and audit outcome `DIAGNOSTIC_FAILED`, retaining bounded output for troubleshooting. `system` uses `&&` so an earlier failure cannot be masked by a later command.

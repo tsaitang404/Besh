@@ -7,10 +7,13 @@ import { resolvePublicTarget } from './target.ts'
 import { checkGrant, type MachineAgent } from './mcp-store.ts'
 
 // No user-provided command, shell fragments, paths or service names are accepted.
+// Root-managed NixOS system profile plus standard Linux binary paths. Never inherit
+// an account's writable PATH, and use `command` to bypass shell functions.
+const SYSTEM_PATH = 'PATH=/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin:/usr/bin:/bin:/usr/sbin:/sbin; export PATH; '
 export const DIAGNOSTICS = {
-  system: '/usr/bin/uname -sr; /usr/bin/uptime',
-  disk: '/usr/bin/df -Pk',
-  memory: '/usr/bin/free -k',
+  system: SYSTEM_PATH + 'command uname -sr && command uptime',
+  disk: SYSTEM_PATH + 'command df -Pk',
+  memory: SYSTEM_PATH + 'command free -k',
 } as const
 export type DiagnosticName = keyof typeof DIAGNOSTICS
 export async function inspectServer(env: { DB: D1Database; CREDENTIAL_KEY: string }, agent: MachineAgent, serverId: string, tool: 'server_status' | 'diagnostic_run', diagnostic?: DiagnosticName): Promise<unknown> {

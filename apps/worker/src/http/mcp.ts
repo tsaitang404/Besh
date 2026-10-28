@@ -13,6 +13,11 @@ const tools = [
 const headers = { 'Cache-Control': 'no-store', 'Content-Type': 'application/json' }
 function reply(id: unknown, result: unknown): Response { return Response.json({ jsonrpc: '2.0', id, result }, { headers }) }
 function error(id: unknown, code: number, message: string, status = 200): Response { return Response.json({ jsonrpc: '2.0', id, error: { code, message } }, { status, headers }) }
+/** A transport success does not mean the remote diagnostic completed successfully. */
+export function mcpToolResult(name: string, result: unknown) {
+  const isError = name === 'diagnostic_run' && (result as { exitCode?: number | null })?.exitCode !== 0
+  return { content: [{ type: 'text', text: JSON.stringify(result) }], structuredContent: result, isError }
+}
 /** Stateless Streamable HTTP. Authentication and D1 authorization run on every request. */
 export async function handleMcp(request: Request, env: McpEnv): Promise<Response> {
   if (env.MCP_ENABLED !== 'true') return new Response('Not found', { status: 404 })
@@ -79,8 +84,9 @@ export async function handleMcp(request: Request, env: McpEnv): Promise<Response
     // No output escapes after revocation (including inventory-only operations).
     const live = await findAgent(env.DB, commonName)
     if (!live || live.version !== agent.version) throw new Error('ACCESS_DENIED')
-    outcome = 'success'
-    return reply(id, { content: [{ type: 'text', text: JSON.stringify(result) }], structuredContent: result, isError: false })
+    const response = mcpToolResult(name, result)
+    outcome = response.isError ? 'DIAGNOSTIC_FAILED' : 'success'
+    return reply(id, response)
   } catch (e) {
     const reason = e instanceof Error && ['ACCESS_DENIED', 'HOST_KEY_NOT_TRUSTED', 'CONCURRENCY_LIMIT'].includes(e.message) ? e.message : 'OPERATION_FAILED'
     outcome = reason
