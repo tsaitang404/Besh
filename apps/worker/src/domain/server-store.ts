@@ -133,15 +133,25 @@ export async function updateServer(
   }
 ): Promise<PublicServer> {
   const existing = await db
-    .prepare("SELECT credential, version FROM servers WHERE id = ?")
+    .prepare("SELECT credential, version, auth_method FROM servers WHERE id = ?")
     .bind(id)
-    .first<{ credential: string; version: number }>()
+    .first<{ credential: string; version: number; auth_method: AuthMethod }>()
   if (!existing) throw new ServerStoreError("Server not found")
   if (input.expectedVersion !== undefined && existing.version !== input.expectedVersion) {
     throw new ServerStoreError("This server was changed elsewhere; reload before saving")
   }
+  // The envelope is bound to the credential kind, and the kind is derived from the
+  // authentication method. Keeping a password envelope on a row that now says
+  // publickey would leave a server nothing can decrypt, so the switch has to carry
+  // a replacement secret.
+  if (input.credential === undefined && input.authMethod !== existing.auth_method) {
+    throw new ServerStoreError("A new credential is required when the authentication method changes")
+  }
 
   const credential = input.credential ? JSON.stringify(input.credential) : existing.credential
+  // The version the read above saw has to be part of the write, or two edits that
+  // both read version N would both pass the check and the later one would silently
+  // overwrite the earlier.
   const updated = await db
     .prepare(
       `UPDATE servers
@@ -162,10 +172,12 @@ export async function updateServer(
       existing.version
     )
     .run()
-
   if (updated.meta.changes !== 1) {
+    const still = await db.prepare("SELECT id FROM servers WHERE id = ?").bind(id).first<{ id: string }>()
+    if (!still) throw new ServerStoreError("Server not found")
     throw new ServerStoreError("This server was changed elsewhere; reload before saving")
   }
+
 
   return (await getServerPublic(db, id))!
 }

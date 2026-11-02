@@ -188,6 +188,9 @@ export class TransferQueue {
     if (item.direction !== "upload" || !item.uploadId) return
     const uploadId = item.uploadId
     item.uploadId = undefined
+    // The staging file is about to be removed, so the acknowledged prefix is gone
+    // too: a retry must start from byte zero or it would write the tail into an
+    // empty file and leave a hole of zero bytes where the head used to be.
     item.transferred = 0
     await this.#io.abortUpload(item.path, uploadId).catch(() => undefined)
   }
@@ -228,6 +231,7 @@ export class TransferQueue {
     const bytes = item.bytes
     if (!bytes) throw new Error("Upload has no payload")
     if (!item.uploadId) {
+      // A fresh staging file starts empty, so nothing before this byte was kept.
       item.transferred = 0
       item.uploadId = await this.#io.beginUpload(item.path)
     }

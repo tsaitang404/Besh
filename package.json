@@ -1,7 +1,7 @@
 {
   "name": "besh",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "license": "Apache-2.0",
   "type": "module",
   "workspaces": [
@@ -13,6 +13,7 @@
   },
   "scripts": {
     "test:security": "npm run check:web && node tests/account-security.mjs",
+    "test:ui": "node tests/upstream-merge.mjs && node tests/workspace-navigation.mjs",
     "test:regressions": "node tests/mcp-security.mjs && node tests/mcp-background.mjs && node tests/ssh-etm.mjs && node tests/deployment-regressions.mjs && node tests/workers-ai.mjs",
     "check": "npm run check:types && npm run check:web && npm run check:bundle",
     "check:types": "tsc -p tsconfig.json --noEmit",

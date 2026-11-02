@@ -1,5 +1,5 @@
 import { AccountSecurity } from "@/views/account-security"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Bot, Contrast, Eye, Info, Network, Palette, Settings, ShieldCheck, X, Zap } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
@@ -120,6 +120,12 @@ export function SettingsDialog({ open, onOpenChange, onPermissionChange }: {
   const [apiKey, setApiKey] = useState("")
   const [nativeAi, setNativeAi] = useState<{ model: string; requestsUsed: number } | null>(null)
   const [hasKey, setHasKey] = useState(false)
+  // The endpoint and key are stored as soon as the field is left: there is
+  // nothing to review about them, and forgetting to press save was the common
+  // failure. Only the model limits still need an explicit save.
+  const savedBaseUrl = useRef("")
+  const providerQueue = useRef<Promise<unknown>>(Promise.resolve())
+  const savedModel = useRef("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [securityCode, setSecurityCode] = useState("")
@@ -129,6 +135,7 @@ export function SettingsDialog({ open, onOpenChange, onPermissionChange }: {
 
   const load = useCallback(async () => {
     try {
+      await providerQueue.current
       const [nextGroups, settings] = await Promise.all([api.groups(), api.settings()])
       setGroups(nextGroups)
       setPermission(settings.aiPermission)
@@ -137,6 +144,8 @@ export function SettingsDialog({ open, onOpenChange, onPermissionChange }: {
       setProviderReady(settings.aiProvider.configured)
       setHasKey(settings.aiProvider.hasKey)
       setBaseUrl(settings.aiProvider.baseUrl)
+      savedBaseUrl.current = settings.aiProvider.baseUrl
+      savedModel.current = settings.aiProvider.model
       setModel(settings.aiProvider.model)
       setContextWindow(formatTokenCount(settings.aiProvider.params.contextWindow))
       setMaxOutput(formatTokenCount(settings.aiProvider.params.maxOutput))
@@ -187,44 +196,52 @@ export function SettingsDialog({ open, onOpenChange, onPermissionChange }: {
     }
   }
 
-  async function saveProvider(event: React.FormEvent) {
-    event.preventDefault()
-    setBusy(true)
-    try {
-      const saved = await api.saveSettings({
-        aiProvider: {
-          baseUrl,
-          model,
-          apiKey,
-          params: {
-            contextWindow: parseTokenCount(contextWindow),
-            maxOutput: parseTokenCount(maxOutput),
-            inputs: { text: true, image: readsImages },
-            effort,
-          },
-        },
-      })
+  // Serialize both blur saves and explicit saves. Each queued request owns a
+  // snapshot; completing it must not erase edits made while it was in flight.
+  function persistProvider(explicit: boolean) {
+    const snapshot = { baseUrl: baseUrl.trim(), model, apiKey }
+    if (!snapshot.baseUrl) return Promise.resolve()
+    const params = explicit ? {
+      contextWindow: parseTokenCount(contextWindow),
+      maxOutput: parseTokenCount(maxOutput),
+      inputs: { text: true, image: readsImages },
+      effort,
+    } : undefined
+    const pending = providerQueue.current.then(async () => {
+      if (!explicit && snapshot.baseUrl === savedBaseUrl.current && !snapshot.apiKey.trim()) return
+      const saved = await api.saveSettings({ aiProvider: {
+        ...snapshot,
+        model: explicit ? snapshot.model : savedModel.current,
+        // Blur saves preserve stored advanced parameters, including an explicit
+        // save ahead of this request in the queue.
+        ...(explicit ? { params } : {}),
+      } })
       setConfigured(saved.aiConfigured)
       setNativeAi(saved.nativeAi ?? null)
       setProviderReady(saved.aiProvider.configured)
       setHasKey(saved.aiProvider.hasKey)
       setModels(null)
-      setBaseUrl(saved.aiProvider.baseUrl)
-      setModel(saved.aiProvider.model)
-      setReadsImages(saved.aiProvider.params.inputs.image)
-      setEffort(saved.aiProvider.params.effort)
-      setApiKey("")
-      toast.success(t("settings.providerSaved"))
-    } catch (reason) {
-      toast.error(
-        reason instanceof ApiError && reason.code === "INVALID_REQUEST"
-          ? t("settings.providerInvalid")
-          : t("settings.saveFailed")
-      )
-    } finally {
-      setBusy(false)
-    }
+      savedBaseUrl.current = saved.aiProvider.baseUrl
+      savedModel.current = saved.aiProvider.model
+      setBaseUrl(value => value.trim() === snapshot.baseUrl ? saved.aiProvider.baseUrl : value)
+      setApiKey(value => value === snapshot.apiKey ? "" : value)
+      if (explicit) toast.success(t("settings.providerSaved"))
+    }).catch(reason => {
+      toast.error(reason instanceof ApiError && reason.code === "INVALID_REQUEST"
+        ? t("settings.providerInvalid") : t("settings.saveFailed"))
+    })
+    // Catch above also keeps one failed save from poisoning subsequent edits.
+    providerQueue.current = pending
+    return pending
   }
+
+  async function saveProvider(event: React.FormEvent) {
+    event.preventDefault()
+    setBusy(true)
+    try { await persistProvider(true) } finally { setBusy(false) }
+  }
+
+  function autoSaveProvider() { return persistProvider(false) }
 
   async function changePermission(next: Permission) {
     const previous = permission
@@ -458,26 +475,26 @@ export function SettingsDialog({ open, onOpenChange, onPermissionChange }: {
               <div className="mt-1 grid grid-cols-1 gap-2 sm:grid-cols-2" role="list" aria-label={t("settings.sections.groups")}>
                 {groups === null && <p className="text-[13px] text-muted-foreground">{t("app.loading")}</p>}
                 {groups?.length === 0 && <p className="text-[13px] text-muted-foreground">{t("settings.noGroups")}</p>}
+                {/* Three tracks with equal side columns, so the count sits in
+                    the middle of the row rather than next to the delete button. */}
                 {groups?.map((group) => (
                   <div
                     key={group.id}
                     role="listitem"
-                    className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2"
+                    className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-lg border border-border px-3 py-2"
                   >
-                    <div className="min-w-0">
-                      <div className="truncate text-[13px] font-medium">{group.name}</div>
-                      <div className="text-[11px] text-muted-foreground">
-                        {t("settings.serverCount", { count: group.serverCount })}
-                      </div>
+                    <div className="min-w-0 truncate text-[13px] font-medium">{group.name}</div>
+                    <div className="justify-self-center text-[11px] tabular-nums text-muted-foreground">
+                      {t("settings.serverCount", { count: group.serverCount })}
                     </div>
                     <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="text-muted-foreground hover:text-danger"
-                        aria-label={t("settings.deleteGroup", { name: group.name })}
-                        disabled={busy}
-                        onClick={() => void removeGroup(group)}
-                      >
+                      variant="ghost"
+                      size="icon-sm"
+                      className="justify-self-end text-danger hover:bg-danger/15 hover:text-danger active:bg-danger/25"
+                      aria-label={t("settings.deleteGroup", { name: group.name })}
+                      disabled={busy}
+                      onClick={() => void removeGroup(group)}
+                    >
                       <X />
                     </Button>
                   </div>
@@ -517,6 +534,7 @@ export function SettingsDialog({ open, onOpenChange, onPermissionChange }: {
                         id="ai-base-url"
                         value={baseUrl}
                         onChange={(event) => setBaseUrl(event.target.value)}
+                        onBlur={() => void autoSaveProvider()}
                         placeholder="https://api.openai.com/v1"
                         autoComplete="off"
                         className="h-9"
@@ -529,6 +547,7 @@ export function SettingsDialog({ open, onOpenChange, onPermissionChange }: {
                         type="password"
                         value={apiKey}
                         onChange={(event) => setApiKey(event.target.value)}
+                        onBlur={() => void autoSaveProvider()}
                         placeholder={hasKey ? t("settings.providerKeyKeep") : t("settings.providerKeyNeeded")}
                         autoComplete="off"
                         className="h-9"
@@ -683,19 +702,19 @@ export function SettingsDialog({ open, onOpenChange, onPermissionChange }: {
 
                   <p className="text-[11px] text-muted-foreground">{t("settings.modelHints")}</p>
 
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-end gap-2">
+                  <div className="flex items-center justify-end border-t border-border pt-3">
                     <Button
                       type="submit"
                       variant="outline"
-                      className="h-9 px-3.5 text-[13px]"
+                      className="h-9 shrink-0 px-3.5 text-[13px]"
                       disabled={busy || baseUrl.trim().length === 0}
                     >
                       {t("settings.providerSave")}
                     </Button>
+                  </div>
+
+                      </div>
+                    )}
                   </div>
 
                 </FieldGroup>

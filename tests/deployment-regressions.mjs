@@ -23,3 +23,10 @@ const common={host:'example.com',port:22,username:'root',authMethod:'password',g
 const results=await Promise.allSettled([updateServer(db,'s1',{...common,name:'edit-A'}),updateServer(db,'s1',{...common,name:'edit-B'})]);assert.equal(results.filter(x=>x.status==='fulfilled').length,1);assert.equal(results.filter(x=>x.status==='rejected').length,1);console.log('PASS: concurrent stale edit rejected');
 const response=await handleUpdateServer(new Request('https://besh.test/api/servers/s1',{method:'PUT',body:JSON.stringify({...common,name:'changed',authMethod:'publickey',credential:'',version:2})}),{DB:db,CREDENTIAL_KEY:Buffer.from(key).toString('base64')},'s1',{resolve:async()=>['93.184.216.34']});
 assert.equal(response.status,400);assert.equal(sql.prepare('select auth_method from servers').get().auth_method,'password');console.log('PASS: auth method change requires a new credential');
+
+await assert.rejects(updateServer(db,'s1',{...common,name:'direct-switch',expectedVersion:2,authMethod:'publickey'}),/new credential/);
+console.log('PASS: storage-layer auth switch guard also rejects bypassing the HTTP validator');
+const deletingDb={prepare(query){const statement=db.prepare(query);if(!/^UPDATE servers/.test(query.trim()))return statement;return {bind(...v){statement.bind(...v);return this},async run(){sql.prepare('DELETE FROM servers WHERE id=?').run('s1');return statement.run()}}}};
+const removed=await handleUpdateServer(new Request('https://besh.test/api/servers/s1',{method:'PUT',body:JSON.stringify({...common,name:'deleted-during-edit',version:2})}),{DB:deletingDb,CREDENTIAL_KEY:Buffer.from(key).toString('base64')},'s1',{resolve:async()=>['93.184.216.34']});
+assert.equal(removed.status,404);console.log('PASS: host deleted between read and update returns 404');
+sql.close();
