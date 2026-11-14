@@ -4,6 +4,38 @@ Changes worth telling users about, newest first. The repository ships the
 implementation itself; this file exists so the notes for a release can be copied
 out without reconstructing them from commit messages.
 
+## Unreleased
+
+### Fixed
+
+- **Switching tabs rewrapped the terminal.** An inactive tab is hidden, so it
+  measures a fraction of its real size, and it was reporting that size to the
+  server: the shell then rewrapped everything it printed at a dozen columns, so
+  coming back showed a torn first line. A pane only refits and reports its size
+  while it is visible. (`apps/web/src/views/terminal-view.tsx`)
+
+- **A long file name broke the delete dialog.** The name sat in an unbroken
+  token, which widened the dialog's single grid track: the body and the footer
+  painted outside the card and the buttons ended up adrift. The track is now
+  `minmax(0, 1fr)` and the title breaks anywhere, so a name of any length wraps
+  inside the dialog. The plain dialog had the same track and got the same fix.
+  (`apps/web/src/components/ui/alert-dialog.tsx`,
+  `apps/web/src/components/ui/dialog.tsx`)
+
+- **The terminal grid hung over the bottom of its pane.** The pane's padding was
+  counted as usable height when the grid was measured, so the last row landed in
+  the padding and was cut in half — most visibly at the bottom edge, right above
+  the file panel. The padding now lives on a wrapper and the terminal is
+  measured in an unpadded box, which leaves a small gap under the last row.
+  (`apps/web/src/views/terminal-view.tsx`)
+
+- **Long paths no longer clip in the assistant panel.** A message carrying one
+  unbroken path — two absolute paths and no spaces between them, as pasted from a
+  terminal — stretched the bubble past its maximum width, and the text was cut at
+  both ends. The message bubble and the reply prose now break inside a token when
+  they have to, so a path wraps and stays readable.
+  (`apps/web/src/views/ai-panel.tsx`)
+
 ## v1.0.1 — 2026-10-29
 
 ### Fixed

@@ -582,12 +582,19 @@ export function TerminalView({ sessionId, serverId, ticket, onError, onReconnect
       socket.close()
     })
 
-    refit.current = () => {
+    // An inactive tab is display:none, so it measures zero: fitting there would
+    // squeeze the grid down to a couple of columns, and the reflow that follows
+    // rewraps lines that are already on screen — switching back shows a wrapped,
+    // clipped buffer instead of the terminal you left. Only fit a visible pane.
+    const applyFit = () => {
+      if (element.clientWidth === 0 || element.clientHeight === 0) return
       fit.fit()
       if (isCurrent() && ready.current && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: "resize", cols: terminal.cols, rows: terminal.rows }))
       }
     }
+
+    refit.current = applyFit
 
     const disposable = terminal.onData((input) => {
       if (isCurrent() && ready.current && socket.readyState === WebSocket.OPEN) {
@@ -597,10 +604,7 @@ export function TerminalView({ sessionId, serverId, ticket, onError, onReconnect
 
     const observer = new ResizeObserver(() => {
       if (disposed) return
-      fit.fit()
-      if (isCurrent() && ready.current && socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ type: "resize", cols: terminal.cols, rows: terminal.rows }))
-      }
+      applyFit()
     })
     observer.observe(element)
 
@@ -660,11 +664,16 @@ export function TerminalView({ sessionId, serverId, ticket, onError, onReconnect
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <ContextMenu>
           <ContextMenuTrigger asChild>
-            <div
-              ref={host}
-              className="besh-terminal-pane min-h-0 flex-2 overflow-hidden bg-[var(--terminal-bg)] p-2"
-              onContextMenu={() => setSelection(terminalRef.current?.getSelection() ?? "")}
-            />
+            {/* The padding lives on this wrapper, not on the element the terminal
+                is measured in: FitAddon reads clientHeight, which includes
+                padding, so padding here used to cost the grid its last row. */}
+            <div className="besh-terminal-pane min-h-0 flex-2 overflow-hidden bg-[var(--terminal-bg)] p-2 pb-3">
+              <div
+                ref={host}
+                className="h-full min-h-0 w-full"
+                onContextMenu={() => setSelection(terminalRef.current?.getSelection() ?? "")}
+              />
+            </div>
           </ContextMenuTrigger>
           <ContextMenuContent className="w-40">
             <ContextMenuItem disabled={selection.length === 0} onSelect={() => void copySelection()}>
