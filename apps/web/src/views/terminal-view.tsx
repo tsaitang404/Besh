@@ -20,6 +20,8 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
 import { SftpPanel, type FsOperation } from "@/views/sftp-panel"
+import { attachMobileTerminalInput } from "@/lib/mobile-terminal-input"
+import { terminalText } from "@/lib/terminal-text"
 import { readTerminalFont, watchTerminalFont } from "@/lib/terminal-font"
 
 /**
@@ -87,6 +89,7 @@ export function TerminalView({ sessionId, serverId, ticket, onError, onReconnect
   const [detached, setDetached] = useState(false)
   /** Text selected in the terminal when the context menu opened. */
   const [selection, setSelection] = useState("")
+  const [textOutput, setTextOutput] = useState<string | null>(null)
   /** Set when the host presented a key that differs from the stored one. */
   const [hostKeyChange, setHostKeyChange] = useState<{ stored: string; presented: string } | null>(null)
   // Whether the chosen model reads pictures. Off until the settings say otherwise:
@@ -596,11 +599,17 @@ export function TerminalView({ sessionId, serverId, ticket, onError, onReconnect
 
     refit.current = applyFit
 
-    const disposable = terminal.onData((input) => {
+    const sendInput = (input: string) => {
       if (isCurrent() && ready.current && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: "input", data: encodeBase64(input) }))
       }
-    })
+    }
+    const disposable = terminal.onData(sendInput)
+    const detachInput = terminal.textarea ? attachMobileTerminalInput(
+      element, terminal.textarea,
+      () => navigator.maxTouchPoints > 0 && !terminal.options.disableStdin,
+      sendInput, text => terminal.paste(text),
+    ) : undefined
 
     const observer = new ResizeObserver(() => {
       if (disposed) return
@@ -613,6 +622,7 @@ export function TerminalView({ sessionId, serverId, ticket, onError, onReconnect
       disposed = true
       observer.disconnect()
       disposable.dispose()
+      detachInput?.()
       requests.current.cancelAll(new Error(translateRef.current("files.notConnected")))
       activeAiRequest.current = null
       ready.current = false
@@ -663,11 +673,21 @@ export function TerminalView({ sessionId, serverId, ticket, onError, onReconnect
       />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <ContextMenu>
-          <ContextMenuTrigger asChild>
+          <ContextMenuTrigger asChild disabled={textOutput !== null}>
             {/* The padding lives on this wrapper, not on the element the terminal
                 is measured in: FitAddon reads clientHeight, which includes
                 padding, so padding here used to cost the grid its last row. */}
-            <div className="besh-terminal-pane min-h-0 flex-2 overflow-hidden bg-[var(--terminal-bg)] p-2 pb-3">
+            <div className="besh-terminal-pane relative min-h-0 flex-2 overflow-hidden bg-[var(--terminal-bg)] p-2 pb-3">
+              <button type="button" className="besh-output-toggle" aria-pressed={textOutput !== null}
+                onClick={() => {
+                  if (textOutput !== null) { setTextOutput(null); return }
+                  terminalRef.current?.blur()
+                  setTextOutput(terminalRef.current ? terminalText(terminalRef.current) : "")
+                }}>{t(textOutput === null ? "terminal.selectOutput" : "terminal.backToTerminal")}</button>
+              {textOutput !== null && <div className="besh-selectable-output">
+                <p>{t("terminal.outputSnapshot")}</p>
+                <pre tabIndex={0}>{textOutput}</pre>
+              </div>}
               <div
                 ref={host}
                 className="h-full min-h-0 w-full"

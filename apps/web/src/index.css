@@ -327,3 +327,16 @@
   .besh-settings-content [data-slot="tabs-content"] { min-width: 0; }
   .besh-settings-content #ai-model { flex: 1 0 100%; min-width: 0; }
 }
+
+.besh-output-toggle {
+  position: absolute; top: 4px; right: 8px; z-index: 5;
+  padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--background); color: var(--foreground); font-size: 12px;
+}
+.besh-selectable-output {
+  position: absolute; inset: 0; z-index: 4; overflow: auto; padding: 36px 12px 12px;
+  background: var(--terminal-bg); color: var(--foreground);
+  touch-action: pan-x pan-y; user-select: text; -webkit-user-select: text;
+}
+.besh-selectable-output p { font-size: 12px; margin-bottom: 8px; }
+.besh-selectable-output pre { white-space: pre; width: max-content; min-width: 100%; user-select: text; -webkit-user-select: text; }
