@@ -14,7 +14,7 @@
   "scripts": {
     "test:security": "npm run check:web && node tests/account-security.mjs",
     "test:terminal": "node tests/mobile-terminal-input.mjs && node tests/mobile-terminal-browser.mjs",
-    "test:ui": "node tests/upstream-merge.mjs && node tests/workspace-navigation.mjs",
+    "test:ui": "node tests/upstream-merge.mjs && node tests/workspace-navigation.mjs && node tests/upstream-dialog-drafts.mjs",
     "test:regressions": "node tests/mobile-terminal-input.mjs && node tests/mcp-security.mjs && node tests/mcp-background.mjs && node tests/ssh-etm.mjs && node tests/deployment-regressions.mjs && node tests/workers-ai.mjs",
     "check": "npm run check:types && npm run check:web && npm run check:bundle",
     "check:types": "tsc -p tsconfig.json --noEmit",
